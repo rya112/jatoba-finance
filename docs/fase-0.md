@@ -5,8 +5,8 @@ Esta fase não depende de código. Parte dela acontece **fora do repositório**,
 ## No repositório
 
 - [x] Extratos fictícios em `packages/core/test/fixtures/`, cobrindo os casos difíceis da importação.
-- [ ] Escolher a licença (MIT ou AGPL-3.0) e adicioná-la pelo GitHub: **Add file → Create new file → `LICENSE` → Choose a license template**.
-- [ ] Decidir entre conta pessoal e uma organização `jatoba-finance` no GitHub.
+- [x] Licença escolhida: AGPL-3.0, no arquivo `LICENSE`.
+- [x] Conta pessoal no GitHub: `rya112/jatoba-finance`.
 
 ## Fora do repositório (na sua máquina, nunca no Git)
 

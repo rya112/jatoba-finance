@@ -13,6 +13,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Validação da configuração na partida: usuário e senha obrigatórios no `.env`, senha com 14 caracteres ou mais e diferente da senha de exemplo.
 - Página provisória e verificação de saúde em `/health`.
 - Extratos OFX fictícios para testes.
+- Licença AGPL-3.0.
 
 ### Segurança
 

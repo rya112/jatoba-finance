@@ -55,8 +55,8 @@ npm run build
 npm test
 ```
 
-Requer Node.js 22 ou mais novo.
+Requer Node.js 26 ou mais novo.
 
 ## Licença
 
-A definir antes da primeira versão pública.
+[AGPL-3.0](LICENSE). Você pode usar, estudar, modificar e redistribuir o Jatobá. Se oferecer uma versão modificada para outras pessoas usarem pela rede, precisa disponibilizar o código-fonte dessa versão.

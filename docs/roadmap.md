@@ -20,4 +20,4 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Estrutura inicial do repositório
 - [x] Extratos fictícios de teste
 - [ ] Metas e categorias do autor (fora do repositório)
-- [ ] Licença escolhida
+- [x] Licença escolhida (AGPL-3.0)
