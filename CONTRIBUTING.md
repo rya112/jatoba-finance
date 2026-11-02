@@ -1,0 +1,27 @@
+# Como contribuir
+
+Obrigado pelo interesse! O projeto ainda está nas primeiras fases, então issues com ideias e relatos são tão bem-vindos quanto código.
+
+## Regra número um: nenhum dado real
+
+Nunca envie extratos, faturas, nomes, números de conta ou valores reais, nem em issues, nem em código, nem em capturas de tela. Para testes, use os extratos fictícios de `packages/core/test/fixtures/` ou crie novos, inventados.
+
+## Preparar o ambiente
+
+```bash
+npm install
+npm run build
+npm test
+```
+
+Requer Node.js 22 ou mais novo e, para rodar tudo junto, o Docker.
+
+## Antes de abrir um pull request
+
+- `npm run build` e `npm test` passam.
+- Mudanças visíveis para quem usa entram no `CHANGELOG.md`, na seção **Não publicado**.
+- Mensagens de commit no formato `tipo: descrição` (`feat`, `fix`, `docs`, `chore`, `test`).
+
+## Perfis de banco
+
+A contribuição mais valiosa: ensinar o Jatobá a ler o extrato de um banco. Veja [bank-profiles/README.md](bank-profiles/README.md). O formato será definido na fase 2 do roadmap.

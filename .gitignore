@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+
+# Extratos reais nunca entram no repositório.
+# Só os extratos fictícios de teste são permitidos.
+*.ofx
+*.OFX
+*.csv
+*.CSV
+!packages/core/test/fixtures/**/*.ofx
+!packages/core/test/fixtures/**/*.csv
+
+# Backups
+backups/
+*.age
+*.sql
+*.sql.gz

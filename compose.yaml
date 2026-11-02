@@ -1,0 +1,63 @@
+name: jatoba
+
+services:
+  app:
+    image: ghcr.io/rya112/jatoba-finance:${JATOBA_VERSION:-dev}
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://jatoba:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/jatoba
+    ports:
+      # Só o próprio computador acessa. Para acesso remoto, veja docs/acesso-remoto.md
+      - "127.0.0.1:${JATOBA_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jatoba
+      POSTGRES_DB: jatoba
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jatoba -d jatoba"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  # Acesso remoto pelo Tailscale, sem instalar nada no sistema.
+  # Ativar com: docker compose --profile tailscale up -d
+  tailscale:
+    image: tailscale/tailscale:stable
+    profiles: [tailscale]
+    restart: unless-stopped
+    hostname: jatoba
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: jatoba
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  tailscale-state:

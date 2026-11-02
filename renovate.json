@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/Sao_Paulo",
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "atualizações menores"
+    },
+    {
+      "matchPackageNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}
