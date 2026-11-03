@@ -14,6 +14,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      # Backups criptografados, visíveis na pasta backups/ ao lado deste arquivo.
+      - ./backups:/backups
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true

@@ -20,6 +20,18 @@ function checkOrder(migrations: readonly Migration[]): void {
 }
 
 /**
+ * Migrações ainda não aplicadas e se o banco já tinha alguma.
+ * Num banco recém-criado, `hasData` é false e não há o que proteger com backup.
+ */
+export async function pendingMigrations(sql: Sql, migrations: readonly Migration[] = MIGRATIONS): Promise<{ pending: string[]; hasData: boolean }> {
+  const [table] = await sql<{ name: string | null }[]>`select to_regclass('public.schema_migrations')::text as name`;
+  if (!table?.name) return { pending: migrations.map((m) => m.id), hasData: false };
+  const rows = await sql<{ id: string }[]>`select id from schema_migrations`;
+  const applied = new Set(rows.map((row) => row.id));
+  return { pending: migrations.filter((m) => !applied.has(m.id)).map((m) => m.id), hasData: true };
+}
+
+/**
  * Aplica as migrações pendentes numa única transação.
  * Se qualquer uma falhar, nada é aplicado e o banco fica como estava.
  * Devolve os ids aplicados agora.

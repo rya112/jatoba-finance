@@ -34,6 +34,12 @@ const schema = z
     TELEGRAM_BOT_TOKEN: z.string().optional(),
     TELEGRAM_ALLOWED_CHAT_IDS: z.string().optional(),
     BOT_NAME: z.string().default("Jatobá"),
+    JATOBA_BACKUP_RECIPIENT: z
+      .string()
+      .trim()
+      .regex(/^age1[02-9ac-hj-np-z]{58}$/, "precisa ser uma chave pública do age (começa com age1); gere com: docker compose run --rm --no-deps app jatoba keygen")
+      .optional(),
+    JATOBA_BACKUP_DIR: z.string().default("/backups"),
   })
   .superRefine((config, ctx) => {
     if (config.AI_PROVIDER === "anthropic" && !config.ANTHROPIC_API_KEY) {

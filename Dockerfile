@@ -16,6 +16,11 @@ FROM node:26-alpine
 ARG JATOBA_VERSION=dev
 ENV NODE_ENV=production \
     JATOBA_VERSION=${JATOBA_VERSION}
+# pg_dump/psql na mesma versão maior do Postgres do compose, e age para criptografar os backups.
+RUN apk add --no-cache postgresql16-client age \
+ && printf '#!/bin/sh\nexec node /app/packages/web/dist/cli.js "$@"\n' > /usr/local/bin/jatoba \
+ && chmod 755 /usr/local/bin/jatoba \
+ && mkdir -p /backups && chown node:node /backups
 WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
