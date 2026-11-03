@@ -31,8 +31,8 @@ describe("fatura do C6 (CSV)", () => {
     expect(byDescription("ESTORNO LOJA EXEMPLO")!.amount).toBe(5990);
   });
 
-  it("lê data, parcela, cartão, categoria e milhar com ponto", () => {
-    expect(byDescription("LOJA EXEMPLO")).toMatchObject({ date: "2026-10-08", installment: { current: 3, total: 10 }, cardLast4: "1111", bankCategory: "Departamento" });
+  it("lê data, parcela, cartão, categoria e decimal com ponto, como o C6 real", () => {
+    expect(byDescription("LOJA EXEMPLO")).toMatchObject({ date: "2026-07-08", installment: { current: 3, total: 10 }, cardLast4: "1111", bankCategory: "Departamento" });
     expect(byDescription("MERCADO EXEMPLO")!.installment).toBeUndefined();
     expect(byDescription("RESTAURANTE EXEMPLO")!.cardLast4).toBe("2222");
     expect(byDescription("HOTEL EXEMPLO; CENTRO")!.amount).toBe(-145000);
@@ -40,17 +40,18 @@ describe("fatura do C6 (CSV)", () => {
   });
 
   it("guarda o valor em dólar e a cotação da compra internacional", () => {
-    expect(byDescription("STREAMING EXEMPLO")).toMatchObject({ amount: -4490, foreign: { amount: -799, currency: "USD", rate: "5,62" } });
+    expect(byDescription("STREAMING EXEMPLO")).toMatchObject({ amount: -4490, foreign: { amount: -799, currency: "USD", rate: "5.62" } });
     expect(byDescription("MERCADO EXEMPLO")!.foreign).toBeUndefined();
   });
 
-  it("ignora a linha com data impossível e avisa, sem mostrar o conteúdo", () => {
-    expect(fatura!.transactions).toHaveLength(7);
-    expect(result.warnings).toEqual(["linha 9: data inválida; ignorada."]);
+  it("mantém compras idênticas no mesmo dia (dois cafés) e ignora a linha com data impossível e avisa, sem mostrar o conteúdo", () => {
+    expect(fatura!.transactions.filter((t) => t.description === "CAFE EXEMPLO")).toHaveLength(2);
+    expect(fatura!.transactions).toHaveLength(9);
+    expect(result.warnings).toEqual(["linha 11: data inválida; ignorada."]);
   });
 
-  it("o período vem das datas dos lançamentos", () => {
-    expect(fatura!.start).toBe("2026-10-05");
+  it("o período vem das datas dos lançamentos (parcela traz a data da compra original)", () => {
+    expect(fatura!.start).toBe("2026-07-08");
     expect(fatura!.end).toBe("2026-10-22");
   });
 });

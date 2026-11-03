@@ -1,8 +1,27 @@
-function escapeHtml(value: string): string {
+import { formatMoney, type ImportOutcome, type TransactionRow } from "@jatoba/core";
+
+export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-function layout(title: string, body: string): string {
+type Section = "inicio" | "importar" | "lancamentos";
+
+const NAV: { id: Section; href: string; label: string }[] = [
+  { id: "inicio", href: "/", label: "Início" },
+  { id: "importar", href: "/importar", label: "Importar" },
+  { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
+];
+
+function layout(title: string, body: string, opts: { section?: Section; wide?: boolean } = {}): string {
+  const nav = opts.section
+    ? `<header class="topo">
+    <a class="marca" href="/"><span class="anel pequeno" aria-hidden="true"></span>Jatobá</a>
+    <nav aria-label="Principal">${NAV.map(
+      (item) => `<a href="${item.href}"${item.id === opts.section ? ' aria-current="page"' : ""}>${item.label}</a>`,
+    ).join("")}</nav>
+    <form method="post" action="/sair"><button class="discreto" type="submit">Sair</button></form>
+  </header>`
+    : "";
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -13,53 +32,83 @@ function layout(title: string, body: string): string {
 <style>
   :root {
     --fundo: #fbfaf8; --texto: #22201d; --suave: #6b655d; --cerne: #8a3b22; --linha: #e6e1d9;
-    --campo: #ffffff; --erro: #a12b1b;
+    --campo: #ffffff; --erro: #a12b1b; --entrada: #2f6b3a; --painel: #f3f0eb;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root { --fundo: #171412; --texto: #ece7e1; --suave: #a59d93; --cerne: #d27a5c; --linha: #2e2925;
-      --campo: #201c19; --erro: #f08a76; color-scheme: dark; }
+      --campo: #201c19; --erro: #f08a76; --entrada: #8fcf98; --painel: #1f1b18; color-scheme: dark; }
   }
+  * { box-sizing: border-box; }
   body { margin: 0; background: var(--fundo); color: var(--texto);
     font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 36rem; margin: 0 auto; padding: 18vh 1.5rem 4rem; }
+  main.com-topo { padding-top: 2.5rem; }
+  main.largo { max-width: 60rem; }
   h1 { font-size: clamp(2rem, 7vw, 3rem); line-height: 1.1; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
-  .anel { width: 3.5rem; height: 3.5rem; border-radius: 50%; margin-bottom: 1.5rem;
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
+  a { color: var(--cerne); }
+  .anel { width: 3.5rem; height: 3.5rem; border-radius: 50%; margin-bottom: 1.5rem; display: inline-block;
     background: radial-gradient(circle, var(--cerne) 0 18%, transparent 19% 34%, var(--cerne) 35% 42%, transparent 43% 58%, var(--cerne) 59% 64%, transparent 65%); }
+  .anel.pequeno { width: 1.4rem; height: 1.4rem; margin: 0 0.5rem 0 0; vertical-align: -0.3rem; }
+  .topo { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--linha); }
+  .topo .marca { font-weight: 650; color: var(--texto); text-decoration: none; }
+  .topo nav { display: flex; gap: 1rem; flex: 1; flex-wrap: wrap; }
+  .topo nav a { color: var(--suave); text-decoration: none; }
+  .topo nav a[aria-current="page"] { color: var(--texto); font-weight: 600; text-decoration: underline; text-underline-offset: 0.3rem; }
   p { margin: 1rem 0 0; }
-  .suave { color: var(--suave); font-size: 0.95rem; border-top: 1px solid var(--linha); padding-top: 1rem; margin-top: 2rem;
-    display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-  form.entrar { margin-top: 2rem; display: grid; gap: 1rem; max-width: 22rem; }
+  .suave { color: var(--suave); font-size: 0.95rem; }
+  .rodape { border-top: 1px solid var(--linha); padding-top: 1rem; margin-top: 2rem; }
+  form.entrar, form.importar { margin-top: 2rem; display: grid; gap: 1rem; max-width: 26rem; }
   label { display: grid; gap: 0.3rem; font-size: 0.95rem; color: var(--suave); }
   input { font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--linha);
-    border-radius: 0.5rem; padding: 0.6rem 0.75rem; }
-  input:focus-visible, button:focus-visible { outline: 2px solid var(--cerne); outline-offset: 2px; }
+    border-radius: 0.5rem; padding: 0.6rem 0.75rem; max-width: 100%; }
+  input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--cerne); outline-offset: 2px; }
   button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 0.5rem; padding: 0.6rem 1rem;
-    border: 1px solid var(--cerne); background: var(--cerne); color: var(--fundo); }
+    border: 1px solid var(--cerne); background: var(--cerne); color: var(--fundo); justify-self: start; }
   button.discreto { background: transparent; color: var(--suave); border-color: var(--linha); font-weight: 500; padding: 0.3rem 0.8rem; }
   .erro { color: var(--erro); margin: 0; }
+  .painel { background: var(--painel); border: 1px solid var(--linha); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-top: 1.5rem; }
+  .painel p:first-child { margin-top: 0; }
+  .tabela { width: 100%; overflow-x: auto; margin-top: 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  th { color: var(--suave); font-weight: 500; }
+  td.valor, th.valor { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.data { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .entrada { color: var(--entrada); }
+  .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
 <body>
-<main>
-  <div class="anel" aria-hidden="true"></div>
-${body}
+${nav}
+<main class="${[opts.section ? "com-topo" : "", opts.wide ? "largo" : ""].join(" ").trim()}">
+${opts.section ? "" : '  <div class="anel" aria-hidden="true"></div>\n'}${body}
 </main>
 </body>
 </html>`;
 }
 
-/** Página provisória, enquanto as telas da fase 3 não existem. */
-export function homePage(version: string): string {
+/** "2026-10-05" → "05/10/2026". */
+function brDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+export function homePage(version: string, transactionCount: number): string {
   return layout(
     "Jatobá Finance",
     `  <h1>Jatobá Finance</h1>
   <p>Every resource has a purpose.</p>
-  <p>A instalação está funcionando. As telas de importação, mês e metas chegam nas próximas versões.</p>
-  <div class="suave">
-    <span>Versão ${escapeHtml(version)}</span>
-    <form method="post" action="/sair"><button class="discreto" type="submit">Sair</button></form>
-  </div>`,
+  ${
+    transactionCount === 0
+      ? `<p>Nenhum lançamento ainda. Comece <a href="/importar">importando um extrato</a> (OFX da conta ou CSV da fatura do C6).</p>`
+      : `<p>${transactionCount.toLocaleString("pt-BR")} lançamento(s) importado(s). <a href="/lancamentos">Ver lançamentos</a> ou <a href="/importar">importar mais</a>.</p>`
+  }
+  <p class="suave">As telas do mês e das metas chegam nas próximas versões.</p>
+  <p class="suave rodape">Versão ${escapeHtml(version)}</p>`,
+    { section: "inicio" },
   );
 }
 
@@ -77,5 +126,80 @@ export function loginPage(error?: string): string {
     </label>
     <button type="submit">Entrar</button>
   </form>`,
+  );
+}
+
+function importResult(outcome: ImportOutcome): string {
+  const repeated = outcome.previouslyImportedAt
+    ? `<p>Este mesmo arquivo já tinha sido importado em ${outcome.previouslyImportedAt.toLocaleDateString("pt-BR")}. Nada foi duplicado.</p>`
+    : "";
+  const items = outcome.statements
+    .map((s) => {
+      const period = s.firstDate && s.lastDate ? ` de ${brDate(s.firstDate)} a ${brDate(s.lastDate)}` : "";
+      return `<li><strong>${escapeHtml(s.accountName)}</strong>${period}: ${s.inserted} novo(s)${
+        s.duplicates ? `, ${s.duplicates} já existia(m) e foi(ram) ignorado(s)` : ""
+      }.</li>`;
+    })
+    .join("");
+  const warnings = outcome.warnings.length
+    ? `<p class="suave">Avisos:</p><ul class="suave">${outcome.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>`
+    : "";
+  return `<div class="painel" role="status">
+    <p><strong>${escapeHtml(outcome.fileName)}</strong> importado.</p>
+    ${repeated}<ul>${items}</ul>${warnings}
+    <p><a href="/lancamentos">Ver lançamentos</a></p>
+  </div>`;
+}
+
+export function importPage(opts: { outcome?: ImportOutcome; error?: string } = {}): string {
+  return layout(
+    "Importar · Jatobá Finance",
+    `  <h1>Importar extrato</h1>
+  <p>Envie o <strong>OFX</strong> da conta ou o <strong>CSV</strong> da fatura do C6. Pode enviar períodos que se sobrepõem: o que já foi importado é ignorado.</p>
+  ${opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : ""}
+  ${opts.outcome ? importResult(opts.outcome) : ""}
+  <form class="importar" method="post" action="/importar" enctype="multipart/form-data">
+    <label>Arquivo (até 10 MB)
+      <input type="file" name="arquivo" accept=".ofx,.csv,.txt" required>
+    </label>
+    <button type="submit">Importar</button>
+  </form>
+  <p class="suave">O arquivo é lido e descartado; só os lançamentos ficam guardados no seu banco de dados.</p>`,
+    { section: "importar" },
+  );
+}
+
+export function transactionsPage(rows: TransactionRow[], total: number): string {
+  if (total === 0) {
+    return layout(
+      "Lançamentos · Jatobá Finance",
+      `  <h1>Lançamentos</h1>
+  <p>Nenhum lançamento ainda. <a href="/importar">Importe um extrato</a> para começar.</p>`,
+      { section: "lancamentos" },
+    );
+  }
+  const body = rows
+    .map((r) => {
+      const tags = [r.installment ? `parcela ${r.installment}` : "", r.cardLast4 ? `cartão ${r.cardLast4}` : ""]
+        .filter(Boolean)
+        .map((t) => `<span class="etiqueta">${escapeHtml(t)}</span>`)
+        .join("");
+      return `<tr>
+        <td class="data">${brDate(r.date)}</td>
+        <td>${escapeHtml(r.description)}${tags}</td>
+        <td class="suave">${escapeHtml(r.accountName)}</td>
+        <td class="valor${r.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(r.amount, "pt-BR", r.currency))}</td>
+      </tr>`;
+    })
+    .join("");
+  return layout(
+    "Lançamentos · Jatobá Finance",
+    `  <h1>Lançamentos</h1>
+  <p class="suave">${total.toLocaleString("pt-BR")} lançamento(s)${rows.length < total ? `, mostrando os ${rows.length} mais recentes` : ""}. Entradas em verde; saídas negativas.</p>
+  <div class="tabela"><table>
+    <thead><tr><th scope="col">Data</th><th scope="col">Descrição</th><th scope="col">Conta</th><th scope="col" class="valor">Valor</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`,
+    { section: "lancamentos", wide: true },
   );
 }

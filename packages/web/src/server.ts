@@ -1,7 +1,20 @@
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { basename } from "node:path";
-import { ConfigError, MigrationError, connect, isDatabaseUp, loadConfig, migrate, pendingMigrations, waitForDatabase, type Config } from "@jatoba/core";
+import {
+  ConfigError,
+  MigrationError,
+  connect,
+  countTransactions,
+  importFile,
+  isDatabaseUp,
+  listTransactions,
+  loadConfig,
+  migrate,
+  pendingMigrations,
+  waitForDatabase,
+  type Config,
+} from "@jatoba/core";
 import { createBackup } from "./backup.js";
 import { createApp } from "./app.js";
 import { Credentials, LoginLimiter, PgSessionStore } from "./auth.js";
@@ -77,6 +90,11 @@ const app = createApp({
   publicUrl: config.JATOBA_PUBLIC_URL,
   checkDatabase: () => isDatabaseUp(sql),
   clientKey: (c) => getConnInfo(c).remote.address ?? "desconhecido",
+  ledger: {
+    importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
+    list: (opts) => listTransactions(sql, opts),
+    count: () => countTransactions(sql),
+  },
 });
 
 // Dentro do contêiner escuta em todas as interfaces; quem limita o acesso

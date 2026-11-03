@@ -33,7 +33,15 @@ export function toCents(raw: string): Cents {
   return negative && cents !== 0 ? -cents : cents;
 }
 
-/** Formata centavos como moeda, por exemplo "R$ 1.234,56". */
+/** Casas decimais da moeda: 2 para BRL e USD, 0 para CLP e JPY. */
+export function currencyDigits(currency: string): number {
+  return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+}
+
+/**
+ * Formata um valor na menor unidade da moeda (centavos para BRL; pesos para CLP),
+ * por exemplo "R$ 1.234,56".
+ */
 export function formatMoney(cents: Cents, locale = "pt-BR", currency = "BRL"): string {
-  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 10 ** currencyDigits(currency));
 }

@@ -29,7 +29,9 @@ Tudo aqui é inventado: bancos, contas, pessoas e valores. **Nunca coloque extra
 | | Parcela em coluna própria | `3/10` e `Única` |
 | | Vários cartões na mesma fatura (titular, adicional, virtual) | Finais 1111, 2222 e 3333 |
 | | Compra em dólar com cotação | `STREAMING EXEMPLO` |
-| | Milhar com ponto e `;` dentro de aspas | `"HOTEL EXEMPLO; CENTRO"` |
+| | Decimal com ponto e sem milhar, como no C6 real (`1450.00`), e `;` dentro de aspas | `"HOTEL EXEMPLO; CENTRO"` |
+| | Parcela com a data da compra original, meses antes da fatura | `LOJA EXEMPLO` 3/10 em 08/07 |
+| | Duas compras idênticas no mesmo dia (não são duplicadas) | `CAFE EXEMPLO` duas vezes |
 | | Data impossível (ignorada, com aviso) | 31/02 |
 
 Para um novo caso, crie um arquivo novo com um nome que diga o que ele testa e acrescente uma linha nesta tabela.

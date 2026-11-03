@@ -31,3 +31,14 @@ describe("formatMoney", () => {
     expect(formatMoney(-5990).replace(/\s/g, " ")).toBe("-R$ 59,90");
   });
 });
+
+describe("moedas sem centavos", () => {
+  it("peso chileno usa 0 casas; real e dólar, 2", async () => {
+    const { currencyDigits } = await import("../src/money.js");
+    expect(currencyDigits("CLP")).toBe(0);
+    expect(currencyDigits("BRL")).toBe(2);
+    expect(currencyDigits("USD")).toBe(2);
+    expect(formatMoney(15000, "pt-BR", "CLP")).toContain("15.000");
+    expect(formatMoney(15000, "pt-BR", "CLP")).not.toContain(",");
+  });
+});

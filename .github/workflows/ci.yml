@@ -36,12 +36,15 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
-  backup:
+  e2e:
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/testar-backup.sh
+      - name: Backup e restauração
+        run: bash scripts/testar-backup.sh
+      - name: Importação pela página
+        run: bash scripts/testar-importacao.sh
 
   docker:
     runs-on: ubuntu-latest

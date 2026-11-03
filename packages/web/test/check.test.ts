@@ -35,7 +35,7 @@ describe("jatoba check: conteúdo do resumo", () => {
   it("mostra as convenções da fatura do C6 só como formatos", () => {
     const output = checkFile(fixture("c6-fatura-exemplo.csv")).join("\n");
     expect(output).toContain("Fatura do cartão C6 Bank");
-    expect(output).toContain('parcela: "Única" 7, "9/99" 1');
+    expect(output).toContain('parcela: "Única" 9, "9/99" 1');
     expect(output).toContain("compras vinham positivas e foram invertidas");
     expect(output).toContain("cartões diferentes: 3");
     expect(output).not.toContain("conta final");

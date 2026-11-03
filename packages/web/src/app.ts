@@ -4,7 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { homePage, loginPage } from "./pages.js";
+import { ImportError, MAX_IMPORT_BYTES, type ImportOutcome, type TransactionRow } from "@jatoba/core";
+import { homePage, importPage, loginPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 
@@ -18,6 +19,11 @@ export interface AppDeps {
   checkDatabase: () => Promise<boolean>;
   /** Quem está tentando entrar, para o limite de tentativas. */
   clientKey: (c: Context) => string;
+  ledger: {
+    importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
+    list: (opts?: { limit?: number }) => Promise<TransactionRow[]>;
+    count: () => Promise<number>;
+  };
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -110,7 +116,38 @@ export function createApp(deps: AppDeps): Hono {
     await next();
   });
 
-  app.get("/", (c) => c.html(homePage(deps.version)));
+  app.get("/", async (c) => c.html(homePage(deps.version, await deps.ledger.count())));
+
+  app.get("/importar", (c) => c.html(importPage()));
+
+  app.post(
+    "/importar",
+    bodyLimit({
+      maxSize: MAX_IMPORT_BYTES + 64 * 1024,
+      onError: (c) => c.html(importPage({ error: "Arquivo grande demais (máximo de 10 MB)." }), 413),
+    }),
+    async (c) => {
+      const form = await c.req.parseBody();
+      const file = form.arquivo;
+      if (!(file instanceof File) || file.size === 0) {
+        return c.html(importPage({ error: "Escolha um arquivo para importar." }), 400);
+      }
+      try {
+        const outcome = await deps.ledger.importFile(file.name, new Uint8Array(await file.arrayBuffer()));
+        return c.html(importPage({ outcome }));
+      } catch (error) {
+        if (error instanceof ImportError || (error instanceof Error && /^(Ofx|Csv)Error$/.test(error.name))) {
+          return c.html(importPage({ error: error.message }), 422);
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.get("/lancamentos", async (c) => {
+    const [rows, total] = await Promise.all([deps.ledger.list({ limit: 500 }), deps.ledger.count()]);
+    return c.html(transactionsPage(rows, total));
+  });
 
   return app;
 }

@@ -1,4 +1,4 @@
-export { toCents, formatMoney, type Cents } from "./money.js";
+export { toCents, formatMoney, currencyDigits, type Cents } from "./money.js";
 export { loadConfig, ConfigError, EXAMPLE_PASSWORD, MIN_PASSWORD_LENGTH, type Config } from "./config.js";
 export { connect, waitForDatabase, isDatabaseUp, type Sql } from "./db.js";
 export { migrate, pendingMigrations, MigrationError } from "./migrate.js";
@@ -19,3 +19,15 @@ export {
   CSV_LAYOUTS,
   type CsvLayout,
 } from "./import/csv.js";
+export {
+  importFile,
+  readStatementFile,
+  fingerprints,
+  listTransactions,
+  countTransactions,
+  ImportError,
+  MAX_IMPORT_BYTES,
+  type ImportOutcome,
+  type ImportSummary,
+  type TransactionRow,
+} from "./import/importer.js";

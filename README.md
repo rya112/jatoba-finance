@@ -30,6 +30,8 @@ Edite o `.env` e preencha `JATOBA_ADMIN_USER`, `JATOBA_ADMIN_PASSWORD` (14 carac
 docker compose up -d --build
 ```
 
+Para importar extratos, entre e use **Importar**: o OFX da conta ou o CSV da fatura do C6. Pode enviar períodos que se sobrepõem, porque o que já foi importado é ignorado.
+
 Configure também os backups criptografados: são três passos, descritos em [docs/backup.md](docs/backup.md).
 
 Abra http://localhost:8080 e entre com o usuário e a senha do `.env`. A página abre **só no próprio computador**. Depois de 5 senhas erradas seguidas, o login fica bloqueado por 15 minutos; para trocar a senha, edite o `.env` e rode `docker compose up -d` de novo. Para usar no celular, siga o guia de [acesso remoto com Tailscale](docs/acesso-remoto.md).

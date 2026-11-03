@@ -23,6 +23,13 @@ docker run -d --rm --name jatoba-pg-teste -e POSTGRES_PASSWORD=teste -p 127.0.0.
 TEST_DATABASE_URL=postgres://postgres:teste@127.0.0.1:55432/postgres npm test
 ```
 
+Testes de ponta a ponta, com Docker, num ambiente isolado que não toca na sua instalação:
+
+```bash
+bash scripts/testar-backup.sh
+bash scripts/testar-importacao.sh
+```
+
 ## Antes de abrir um pull request
 
 - `npm run build` e `npm test` passam.
