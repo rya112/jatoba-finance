@@ -38,6 +38,10 @@ sql() { dc exec -T postgres psql -U jatoba -d jatoba -tAc "$1"; }
 ok() { PASS=$((PASS + 1)); echo "  ok  $1"; }
 fail() {
   echo "  FALHOU  $1" >&2
+  # No GitHub Actions, vira uma anotação visível na página da execução (e pela API pública).
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    echo "::error title=$(basename "$0")::$(echo "$1" | tr '\n' ' ' | cut -c1-500) | app: $(dc logs --no-log-prefix app 2>&1 | tail -3 | tr '\n' ' ' | cut -c1-400)"
+  fi
   echo "--- contêineres ---" >&2; dc ps -a --format '{{.Service}} {{.Status}} {{.Ports}}' >&2 2>&1
   echo "--- $URL/health ---" >&2; curl -sS -m 5 "$URL/health" >&2 2>&1; echo >&2
   echo "--- log do app ---" >&2; dc logs --no-log-prefix app 2>&1 | tail -30 >&2
