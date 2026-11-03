@@ -16,6 +16,8 @@ PASS_="$(grep '^JATOBA_ADMIN_PASSWORD=' "$TMP/teste.env" | cut -d= -f2)"
 # Envia um arquivo pelo formulário; imprime o código HTTP e guarda a página em $TMP/resposta.html.
 send() { curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/resposta.html" -w '%{http_code}' -F "arquivo=@$1;filename=${2:-$(basename "$1")}" "$URL/importar"; }
 page() { grep -c "$1" "$TMP/resposta.html" || true; }
+# Página logada contém o texto? (baixa antes: "curl | grep -q" falha com pipefail quando o grep sai cedo)
+has() { curl -s -b "$JAR" "$URL$1" > "$TMP/pagina.html"; grep -qF -- "$2" "$TMP/pagina.html"; }
 
 dc up -d >/dev/null 2>&1
 wait_healthy
@@ -74,7 +76,7 @@ check "regra do sistema: pagamento de fatura" "$(sql "select c.name from transac
 check "regra do sistema: salário" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description like 'CREDITO SALARIO%'")" "Salário"
 check "categoria do C6: mercado" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'MERCADO EXEMPLO'")" "Mercado"
 check "descrição limpa guardada" "$(sql "select clean_description from transactions where description like 'COMPRA CARTAO DEBITO SUPERMERCADO%'")" "SUPERMERCADO EXEMPLO SAO PAULO"
-curl -s -b "$JAR" "$URL/lancamentos" | grep -q "SUPERMERCADO EXEMPLO SAO PAULO" && ok "lista mostra a descrição limpa" || fail "lista sem descrição limpa"
+has "/lancamentos" "SUPERMERCADO EXEMPLO SAO PAULO" && ok "lista mostra a descrição limpa" || fail "lista sem descrição limpa"
 
 curl -s -b "$JAR" "$URL/revisar" > "$TMP/revisar.html"
 grep -q "para revisar" "$TMP/revisar.html" && ok "página Revisar abre" || fail "Revisar não abriu"
@@ -98,7 +100,7 @@ check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: htt
 
 echo "== Ajustes"
 form() { curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$2" "$URL$1"; }
-curl -s -b "$JAR" "$URL/ajustes" | grep -q "<h1>Ajustes</h1>" && ok "página Ajustes abre" || fail "Ajustes não abriu"
+has "/ajustes" "<h1>Ajustes</h1>" && ok "página Ajustes abre" || fail "Ajustes não abriu"
 CASA="$(sql "select id from categories where name = 'Contas da casa'")"
 check "criar regra pela página" "$(form /ajustes/regras "texto=energia+exemplo&direcao=saida&conta=conta&categoria=$CASA")" "303"
 check "regra aplicada ao lançamento" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'DEB AUTOMATICO ENERGIA EXEMPLO'")" "Contas da casa"
@@ -115,11 +117,11 @@ check "apagar sem confirmação é recusado" "$(form "/ajustes/categorias/$OUTRO
 check "categoria continua lá" "$(sql "select count(*) from categories where id = $OUTROS")" "1"
 
 echo "== Metas"
-curl -s -b "$JAR" "$URL/metas" | grep -q "<h1>Metas</h1>" && ok "página Metas abre" || fail "Metas não abriu"
+has "/metas" "<h1>Metas</h1>" && ok "página Metas abre" || fail "Metas não abriu"
 check "criar meta Viagem de R\$ 10.000" "$(form /metas "nome=Viagem&alvo=10000&prazo=&guardado=")" "303"
 META="$(sql "select id from goals where name = 'Viagem'")"
 APORTE="$(sql "select t.id from transactions t join categories c on c.id = t.category_id where c.name = 'Aporte em investimento' limit 1")"
-curl -s -b "$JAR" "$URL/metas" | grep -q "/metas/ligar/$APORTE" && ok "aporte do extrato aparece para ligar" || fail "aporte não listado"
+has "/metas" "/metas/ligar/$APORTE" && ok "aporte do extrato aparece para ligar" || fail "aporte não listado"
 check "ligar aporte à meta" "$(form "/metas/ligar/$APORTE" "meta=$META")" "303"
 check "registrar R\$ 500 guardados" "$(form "/metas/$META/registros" "tipo=guardar&valor=500&data=2026-11-03&nota=CDB")" "303"
 check "progresso: R\$ 1.500 do aporte + R\$ 500" "$(sql "select sum(amount) from goal_entries where goal_id = $META")" "200000"
@@ -131,7 +133,7 @@ curl -s -b "$JAR" "$URL/mes" > "$TMP/mes.html"
 grep -q "Para onde foi o dinheiro" "$TMP/mes.html" && ok "página do Mês abre" || fail "Mês não abriu"
 grep -q "Novembro de 2026" "$TMP/mes.html" && ok "mostra o mês mais recente (fatura de nov/2026)" || fail "mês errado: $(grep -o '<h1>[^<]*' "$TMP/mes.html")"
 grep -q 'categoria=sem' "$TMP/mes.html" && ok "liga os sem categoria à lista filtrada" || fail "sem link de sem categoria"
-curl -s -b "$JAR" "$URL/lancamentos?mes=2026-10&categoria=sem" | grep -q "Filtrando:" && ok "Lançamentos filtra por mês e categoria" || fail "filtro não aplicado"
+has "/lancamentos?mes=2026-10&categoria=sem" "Filtrando:" && ok "Lançamentos filtra por mês e categoria" || fail "filtro não aplicado"
 
 dc restart app >/dev/null 2>&1
 wait_healthy
