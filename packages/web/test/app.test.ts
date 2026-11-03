@@ -133,6 +133,11 @@ async function makeApp(publicUrl?: string) {
       },
     },
     review,
+    goals: {
+      today: () => "2026-11-03", list: async () => [], entries: async () => [], investments: async () => [],
+      create: async () => 1, update: async () => {}, setArchived: async () => {}, delete: async () => {},
+      addEntry: async () => {}, deleteEntry: async () => {}, assign: async () => {},
+    },
     settings: {
       categories: async () => [], rules: async () => [], accounts: async () => [],
       createCategory: async () => 1, updateCategory: async () => {}, deleteCategory: async () => 0,

@@ -33,4 +33,5 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Fase 3: compras do cartão entram no mês de vencimento da fatura (decisão do autor)
 - [x] Fase 3: tela do Mês e filtros em Lançamentos
 - [x] Fase 3: Ajustes (categorias, regras e contas)
-- [ ] Fase 3: Metas e Assinaturas
+- [x] Fase 3: Metas
+- [ ] Fase 3: Assinaturas

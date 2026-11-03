@@ -8,6 +8,16 @@ import {
   categorize,
   listCategories,
   listForReview,
+  listGoals,
+  listGoalEntries,
+  listUnassignedInvestments,
+  createGoal,
+  updateGoal,
+  setGoalArchived,
+  deleteGoal,
+  addGoalEntry,
+  deleteGoalEntry,
+  assignTransaction,
   listCategoryUsage,
   listRuleDetails,
   listAccounts,
@@ -105,6 +115,10 @@ const sessions = new PgSessionStore(sql);
 await sessions.purgeExpired();
 setInterval(() => void sessions.purgeExpired().catch(() => {}), 6 * 60 * 60_000).unref();
 
+/** Hoje no fuso configurado (TZ do .env), em AAAA-MM-DD. */
+const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: config.TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+const today = () => dayFormat.format(new Date());
+
 const app = createApp({
   version: VERSION,
   credentials: await Credentials.create(config.JATOBA_ADMIN_USER, config.JATOBA_ADMIN_PASSWORD),
@@ -117,6 +131,19 @@ const app = createApp({
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
+  },
+  goals: {
+    today,
+    list: (opts) => listGoals(sql, today(), opts),
+    entries: (goalId) => listGoalEntries(sql, goalId),
+    investments: () => listUnassignedInvestments(sql),
+    create: (input) => createGoal(sql, input, today()),
+    update: (id, input) => updateGoal(sql, id, input),
+    setArchived: (id, archived) => setGoalArchived(sql, id, archived),
+    delete: (id) => deleteGoal(sql, id),
+    addEntry: (goalId, input) => addGoalEntry(sql, goalId, input),
+    deleteEntry: (id) => deleteGoalEntry(sql, id),
+    assign: (transactionId, goalId) => assignTransaction(sql, transactionId, goalId),
   },
   settings: {
     categories: () => listCategoryUsage(sql),

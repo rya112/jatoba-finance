@@ -14,7 +14,7 @@ Crie uma pasta fora do projeto, por exemplo `~/Financas/extratos/`.
 
 - [ ] Baixar 3 meses de extrato de cada conta e cartão, de preferência em OFX, com nomes como `banco-conta-AAAA-MM.ofx`.
 - [ ] Anotar quais bancos exportam OFX, quais só CSV e quais só PDF. Isso define os primeiros perfis de banco.
-- [ ] Preencher as metas: valor alvo, prazo e quanto já está guardado.
+- [ ] Preencher as metas: valor alvo, prazo e quanto já está guardado (direto na página **Metas** do Jatobá).
 - [ ] Ajustar a lista de categorias (umas 15 de despesa, mais receitas, transferências e aportes).
 
 ## Quando um caso real não estiver coberto

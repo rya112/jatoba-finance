@@ -215,4 +215,32 @@ export const MIGRATIONS: readonly Migration[] = [
       update categories set aliases = array[name];
     `,
   },
+  {
+    id: "0008_goals",
+    sql: `
+      create table goals (
+        id          serial primary key,
+        name        text not null,
+        target      bigint not null check (target > 0),
+        deadline    date,
+        archived    boolean not null default false,
+        created_at  timestamptz not null default now()
+      );
+
+      -- Quanto foi guardado (positivo) ou retirado (negativo) de cada meta.
+      -- Pode ser um valor registrado à mão ou um aporte/resgate do extrato (transaction_id),
+      -- que só pode estar ligado a uma meta.
+      create table goal_entries (
+        id              bigserial primary key,
+        goal_id         integer not null references goals (id) on delete cascade,
+        date            date not null,
+        amount          bigint not null check (amount <> 0),
+        note            text,
+        initial         boolean not null default false,
+        transaction_id  bigint unique references transactions (id) on delete cascade,
+        created_at      timestamptz not null default now()
+      );
+      create index goal_entries_goal_idx on goal_entries (goal_id, date);
+    `,
+  },
 ];

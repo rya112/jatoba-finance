@@ -72,3 +72,23 @@ export {
   type RuleInput,
   type AccountInfo,
 } from "./settings.js";
+export {
+  listGoals,
+  createGoal,
+  updateGoal,
+  setGoalArchived,
+  deleteGoal,
+  addGoalEntry,
+  deleteGoalEntry,
+  listGoalEntries,
+  listUnassignedInvestments,
+  assignTransaction,
+  computeProgress,
+  parseAmount,
+  parseDeadline,
+  GoalError,
+  type GoalProgress,
+  type GoalEntry,
+  type GoalStatus,
+  type InvestmentTransaction,
+} from "./goals.js";

@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
-import { homePage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
+import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { goalsPage, homePage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 export const PAGE_SIZE = 50;
@@ -24,6 +24,20 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  goals: {
+    /** Data de hoje (AAAA-MM-DD) no fuso de quem usa. */
+    today: () => string;
+    list: (opts?: { archived?: boolean }) => Promise<GoalProgress[]>;
+    entries: (goalId: number) => Promise<GoalEntry[]>;
+    investments: () => Promise<InvestmentTransaction[]>;
+    create: (input: { name: string; target: string; deadline: string; saved: string }) => Promise<number>;
+    update: (id: number, input: { name: string; target: string; deadline: string }) => Promise<void>;
+    setArchived: (id: number, archived: boolean) => Promise<void>;
+    delete: (id: number) => Promise<void>;
+    addEntry: (goalId: number, input: { kind: string; amount: string; date: string; note: string }) => Promise<void>;
+    deleteEntry: (entryId: string) => Promise<void>;
+    assign: (transactionId: string, goalId: number) => Promise<void>;
   };
   settings: {
     categories: () => Promise<CategoryUsage[]>;
@@ -261,6 +275,84 @@ export function createApp(deps: AppDeps): Hono {
     }
     return c.redirect(`/revisar?duplicado=${decision === "duplicado" ? "descartado" : "mantido"}`, 303);
   });
+
+  // ---------- Metas ----------
+  const GOAL_MESSAGES: Record<string, string> = {
+    criada: "Meta criada.",
+    salva: "Meta salva.",
+    registrado: "Registrado.",
+    apagado: "Registro apagado.",
+    ligado: "Lançamento ligado à meta.",
+    arquivada: "Meta arquivada.",
+    reativada: "Meta reativada.",
+    "meta-apagada": "Meta apagada.",
+  };
+
+  const showGoals = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
+    const [goals, archived, investments] = await Promise.all([deps.goals.list(), deps.goals.list({ archived: true }), deps.goals.investments()]);
+    const entries: Record<number, GoalEntry[]> = {};
+    await Promise.all(goals.map(async (g) => (entries[g.id] = await deps.goals.entries(g.id))));
+    return c.html(goalsPage({ goals, archived, investments, entries, today: deps.goals.today(), ...flash }), status);
+  };
+
+  app.get("/metas", (c) => showGoals(c, { message: GOAL_MESSAGES[c.req.query("ok") ?? ""] }));
+
+  const goalAction = (handler: (c: Context, form: Record<string, string | File>) => Promise<string>) =>
+    async (c: Context) => {
+      const form = await c.req.parseBody();
+      try {
+        return c.redirect(`/metas?ok=${await handler(c, form)}`, 303);
+      } catch (error) {
+        if (error instanceof GoalError) return showGoals(c, { error: error.message }, 400);
+        throw error;
+      }
+    };
+  const goalId = (c: Context): number => {
+    const raw = c.req.param("id") ?? "";
+    if (!/^\d{1,9}$/.test(raw)) throw new GoalError("Meta inválida.");
+    return Number(raw);
+  };
+  const bigId = (c: Context): string => {
+    const raw = c.req.param("id") ?? "";
+    if (!/^\d{1,18}$/.test(raw)) throw new GoalError("Item inválido.");
+    return raw;
+  };
+  const field = (form: Record<string, string | File>, key: string) => (typeof form[key] === "string" ? (form[key] as string) : "");
+  const small = bodyLimit({ maxSize: 8 * 1024 });
+
+  app.post("/metas", small, goalAction(async (_c, form) => {
+    await deps.goals.create({ name: field(form, "nome"), target: field(form, "alvo"), deadline: field(form, "prazo"), saved: field(form, "guardado") });
+    return "criada";
+  }));
+  app.post("/metas/ligar/:id", small, goalAction(async (c, form) => {
+    const meta = field(form, "meta");
+    if (!/^\d{1,9}$/.test(meta)) throw new GoalError("Escolha uma meta.");
+    await deps.goals.assign(bigId(c), Number(meta));
+    return "ligado";
+  }));
+  app.post("/metas/registros/:id/apagar", small, goalAction(async (c) => {
+    await deps.goals.deleteEntry(bigId(c));
+    return "apagado";
+  }));
+  app.post("/metas/:id", small, goalAction(async (c, form) => {
+    await deps.goals.update(goalId(c), { name: field(form, "nome"), target: field(form, "alvo"), deadline: field(form, "prazo") });
+    return "salva";
+  }));
+  app.post("/metas/:id/registros", small, goalAction(async (c, form) => {
+    await deps.goals.addEntry(goalId(c), { kind: field(form, "tipo"), amount: field(form, "valor"), date: field(form, "data"), note: field(form, "nota") });
+    return "registrado";
+  }));
+  app.post("/metas/:id/arquivar", small, goalAction(async (c, form) => {
+    const archive = field(form, "arquivar") !== "0";
+    await deps.goals.setArchived(goalId(c), archive);
+    return archive ? "arquivada" : "reativada";
+  }));
+  app.post("/metas/:id/apagar", small, goalAction(async (c, form) => {
+    if (field(form, "confirmar") !== "1") throw new GoalError("Marque a confirmação para apagar a meta.");
+    await deps.goals.delete(goalId(c));
+    return "meta-apagada";
+  }));
+
 
   // ---------- Ajustes ----------
   const SETTINGS_MESSAGES: Record<string, string> = {

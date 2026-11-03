@@ -1,14 +1,15 @@
-import { formatMoney, normalizeText, type AccountInfo, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-type Section = "inicio" | "mes" | "importar" | "revisar" | "lancamentos" | "ajustes";
+type Section = "inicio" | "mes" | "metas" | "importar" | "revisar" | "lancamentos" | "ajustes";
 
 const NAV: { id: Section; href: string; label: string }[] = [
   { id: "inicio", href: "/", label: "Início" },
   { id: "mes", href: "/mes", label: "Mês" },
+  { id: "metas", href: "/metas", label: "Metas" },
   { id: "importar", href: "/importar", label: "Importar" },
   { id: "revisar", href: "/revisar", label: "Revisar" },
   { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
@@ -120,6 +121,12 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .linha-form { display: flex; gap: 0.5rem 0.75rem; flex-wrap: wrap; align-items: end; margin: 0.6rem 0; }
   .linha-form label { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
   .linha-form select, .linha-form input[type=text] { font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--linha); border-radius: 0.5rem; padding: 0.4rem 0.6rem; max-width: 100%; }
+  .meta .progresso { height: 0.7rem; border-radius: 1rem; background: var(--painel); border: 1px solid var(--linha); overflow: hidden; margin-top: 0.6rem; }
+  .meta .progresso span { display: block; height: 100%; background: var(--entrada); }
+  .meta p { margin: 0.5rem 0 0; }
+  .historico { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.25rem; font-size: 0.95rem; }
+  .historico li { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  .historico form { display: inline; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -158,7 +165,7 @@ export function homePage(version: string, transactionCount: number, pendingRevie
         }`
   }
   ${transactionCount > 0 ? '<p><a href="/mes">Ver o resumo do mês</a>.</p>' : ""}
-  <p class="suave">A tela de metas chega na próxima versão.</p>
+
   <p class="suave rodape">Versão ${escapeHtml(version)}</p>`,
     { section: "inicio" },
   );
@@ -640,5 +647,128 @@ export function settingsPage(opts: {
   <h2>Contas</h2>
   <ul class="lista-ajustes">${accountItems || '<li class="suave">Nenhuma conta ainda. Elas aparecem ao importar extratos.</li>'}</ul>`,
     { section: "ajustes", wide: true },
+  );
+}
+
+const BRL = (cents: number) => escapeHtml(formatMoney(cents, "pt-BR", "BRL"));
+
+function goalStatus(g: GoalProgress): string {
+  switch (g.status) {
+    case "atingida":
+      return '<span class="melhor"><strong>Meta atingida.</strong></span>';
+    case "no-ritmo":
+      return `<span class="melhor">No ritmo:</span> guardar ${BRL(g.monthlyNeeded!)} por mês até ${escapeHtml(monthTitle(g.deadline!))}; nos últimos 3 meses, a média foi ${BRL(g.monthlyPace)}.`;
+    case "abaixo":
+      return `<span class="pior">Abaixo do ritmo:</span> para chegar até ${escapeHtml(monthTitle(g.deadline!))}, guarde ${BRL(g.monthlyNeeded!)} por mês (${g.monthsLeft} mês(es)); a média dos últimos 3 meses foi ${BRL(g.monthlyPace)}.`;
+    case "prazo-vencido":
+      return `<span class="pior">O prazo (${escapeHtml(monthTitle(g.deadline!))}) passou.</span> Faltam ${BRL(g.remaining)}; ajuste o prazo ou o valor.`;
+    case "sem-prazo":
+      return `No ritmo dos últimos 3 meses (${BRL(g.monthlyPace)} por mês), chega lá em ${g.monthsAtPace} mês(es).`;
+    default:
+      return "Sem prazo e sem nada guardado nos últimos 3 meses.";
+  }
+}
+
+function goalCard(g: GoalProgress, entries: GoalEntry[], today: string): string {
+  const history = entries.length
+    ? `<ul class="historico">${entries
+        .map(
+          (e) => `<li><span class="data">${brDate(e.date)}</span>
+          <span class="${e.amount > 0 ? "entrada" : "pior"}">${e.amount > 0 ? "+" : "−"}${BRL(Math.abs(e.amount))}</span>
+          <span class="suave">${escapeHtml(e.description ? `extrato: ${e.description}` : e.note ?? (e.amount > 0 ? "guardado" : "retirado"))}</span>
+          <form method="post" action="/metas/registros/${escapeHtml(e.id)}/apagar"><button class="discreto" type="submit">${e.transactionId ? "desligar" : "apagar"}</button></form></li>`,
+        )
+        .join("")}</ul>`
+    : '<p class="suave">Nada registrado ainda.</p>';
+  return `<li class="cartao meta">
+    <div class="cabeca">
+      <span class="descricao">${escapeHtml(g.name)}</span>
+      <span><strong>${BRL(g.saved)}</strong> <span class="suave">de ${BRL(g.target)}</span></span>
+    </div>
+    <div class="progresso" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.percent}" aria-label="Progresso de ${escapeHtml(g.name)}">
+      <span style="width:${g.percent}%"></span>
+    </div>
+    <p class="suave">${g.percent}% · faltam ${BRL(g.remaining)}${g.deadline ? ` · prazo: ${escapeHtml(monthTitle(g.deadline))}` : ""}</p>
+    <p>${goalStatus(g)}</p>
+    <form class="linha-form" method="post" action="/metas/${g.id}/registros">
+      <select name="tipo" aria-label="Guardar ou retirar"><option value="guardar">Guardei</option><option value="retirar">Retirei</option></select>
+      <label><input type="text" name="valor" inputmode="decimal" placeholder="valor" required aria-label="Valor"></label>
+      <label>em <input type="date" name="data" value="${today}" required></label>
+      <label><input type="text" name="nota" maxlength="120" placeholder="nota (opcional)" aria-label="Nota"></label>
+      <button type="submit">Registrar</button>
+    </form>
+    <details><summary>Histórico e ajustes</summary>
+      ${history}
+      <form class="linha-form" method="post" action="/metas/${g.id}">
+        <label>Nome <input type="text" name="nome" value="${escapeHtml(g.name)}" required minlength="2" maxlength="60"></label>
+        <label>Valor alvo <input type="text" name="alvo" inputmode="decimal" value="${(g.target / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}" required></label>
+        <label>Prazo <input type="month" name="prazo" value="${g.deadline ? g.deadline.slice(0, 7) : ""}"></label>
+        <button type="submit">Salvar</button>
+      </form>
+      <form class="linha-form" method="post" action="/metas/${g.id}/arquivar"><input type="hidden" name="arquivar" value="1"><button class="discreto" type="submit">Arquivar</button></form>
+      <form class="linha-form" method="post" action="/metas/${g.id}/apagar">
+        <label class="regra"><input type="checkbox" name="confirmar" value="1" required> Confirmo apagar “${escapeHtml(g.name)}” e o histórico dela</label>
+        <button class="discreto" type="submit">Apagar</button>
+      </form>
+    </details>
+  </li>`;
+}
+
+export function goalsPage(opts: {
+  goals: GoalProgress[];
+  entries: Record<number, GoalEntry[]>;
+  archived: GoalProgress[];
+  investments: InvestmentTransaction[];
+  today: string;
+  message?: string;
+  error?: string;
+}): string {
+  const flash = [
+    opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
+    opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : "",
+  ].join("");
+  const cards = opts.goals.map((g) => goalCard(g, opts.entries[g.id] ?? [], opts.today)).join("");
+
+  const investments = opts.investments.length && opts.goals.length
+    ? `<h2>Aportes e resgates sem meta</h2>
+  <p class="suave">Lançamentos do extrato nas categorias de aporte e resgate. Ligue cada um a uma meta para ele contar no progresso.</p>
+  <ul class="lista-ajustes">${opts.investments
+    .map(
+      (t) => `<li><form class="linha-form" method="post" action="/metas/ligar/${escapeHtml(t.id)}">
+      <span>${brDate(t.date)} · ${escapeHtml(t.description)} · <span class="${t.amount < 0 ? "" : "entrada"}">${BRL(Math.abs(t.amount))}</span> <span class="suave">(${escapeHtml(t.categoryName)})</span></span>
+      <select name="meta" aria-label="Meta">${opts.goals.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("")}</select>
+      <button type="submit">Ligar</button>
+    </form></li>`,
+    )
+    .join("")}</ul>`
+    : "";
+
+  const archived = opts.archived.length
+    ? `<h2>Arquivadas</h2><ul class="lista-ajustes">${opts.archived
+        .map(
+          (g) => `<li><form class="linha-form" method="post" action="/metas/${g.id}/arquivar">
+          <span><strong>${escapeHtml(g.name)}</strong> <span class="suave">· ${BRL(g.saved)} de ${BRL(g.target)}</span></span>
+          <input type="hidden" name="arquivar" value="0"><button class="discreto" type="submit">Reativar</button></form></li>`,
+        )
+        .join("")}</ul>`
+    : "";
+
+  return layout(
+    "Metas · Jatobá Finance",
+    `  <h1>Metas</h1>${flash}
+  <p class="suave">O progresso soma o que você registra (guardei, retirei) e os aportes e resgates do extrato que você liga a cada meta.</p>
+  ${cards ? `<ul class="cartoes">${cards}</ul>` : '<p>Nenhuma meta ainda. Crie a primeira abaixo, por exemplo “Viagem”, R$ 10.000.</p>'}
+
+  <h2>Nova meta</h2>
+  <form class="linha-form" method="post" action="/metas">
+    <label>Nome <input type="text" name="nome" required minlength="2" maxlength="60" placeholder="Viagem"></label>
+    <label>Valor alvo <input type="text" name="alvo" inputmode="decimal" required placeholder="10.000"></label>
+    <label>Prazo (opcional) <input type="month" name="prazo"></label>
+    <label>Já guardado (opcional) <input type="text" name="guardado" inputmode="decimal" placeholder="0"></label>
+    <button type="submit">Criar meta</button>
+  </form>
+  ${investments}
+  ${archived}`,
+    { section: "metas", wide: true },
   );
 }
