@@ -21,3 +21,6 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Extratos fictícios de teste
 - [ ] Metas e categorias do autor (fora do repositório)
 - [x] Licença escolhida (AGPL-3.0)
+- [x] Fase 1: migrações do banco e login pelo `.env`
+- [ ] Fase 1: backup e restauração
+- [ ] Fase 1: imagem multi-arquitetura

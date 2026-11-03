@@ -14,8 +14,12 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Página provisória e verificação de saúde em `/health`.
 - Extratos OFX fictícios para testes.
 - Licença AGPL-3.0.
+- Login com o usuário e a senha do `.env`. A sessão dura 30 dias, e o botão **Sair** a encerra.
+- Migrações do banco na partida, numa única transação: se uma falhar, nada muda e a aplicação não sobe.
+- `/health` também verifica o banco de dados.
 
 ### Segurança
 
 - Node.js 26 (LTS) na imagem Docker, no CI e como versão mínima (`engines`).
 - Dependências atualizadas para fechar alertas do `npm audit`: `zod` 4, `@hono/node-server` 2 e `vitest` 5.
+- Senha guardada só como hash (scrypt), sessões guardadas só como hash do token, proteção contra CSRF e bloqueio depois de 5 senhas erradas.

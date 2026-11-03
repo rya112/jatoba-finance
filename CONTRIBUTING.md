@@ -14,7 +14,14 @@ npm run build
 npm test
 ```
 
-Requer Node.js 22 ou mais novo e, para rodar tudo junto, o Docker.
+Requer Node.js 26 ou mais novo e, para rodar tudo junto, o Docker.
+
+Os testes de banco rodam quando `TEST_DATABASE_URL` aponta para um Postgres de teste (cada arquivo cria e apaga o próprio banco):
+
+```bash
+docker run -d --rm --name jatoba-pg-teste -e POSTGRES_PASSWORD=teste -p 127.0.0.1:55432:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgres://postgres:teste@127.0.0.1:55432/postgres npm test
+```
 
 ## Antes de abrir um pull request
 

@@ -30,7 +30,7 @@ Edite o `.env` e preencha `JATOBA_ADMIN_USER`, `JATOBA_ADMIN_PASSWORD` (14 carac
 docker compose up -d --build
 ```
 
-Abra http://localhost:8080. A página abre **só no próprio computador**. Para usar no celular, siga o guia de [acesso remoto com Tailscale](docs/acesso-remoto.md).
+Abra http://localhost:8080 e entre com o usuário e a senha do `.env`. A página abre **só no próprio computador**. Depois de 5 senhas erradas seguidas, o login fica bloqueado por 15 minutos; para trocar a senha, edite o `.env` e rode `docker compose up -d` de novo. Para usar no celular, siga o guia de [acesso remoto com Tailscale](docs/acesso-remoto.md).
 
 > Enquanto não houver uma versão publicada, o `--build` constrói a imagem a partir do código. Depois da primeira release, `docker compose up -d` baixa a imagem pronta.
 

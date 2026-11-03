@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "postgres": "^3.4.9",
     "zod": "^4.6.7"
   },
   "license": "AGPL-3.0-only"
