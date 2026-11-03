@@ -223,7 +223,20 @@ export interface TransactionRow {
   cardLast4?: string;
 }
 
-export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {}): Promise<TransactionRow[]> {
+/** Filtros de Lançamentos: mês de competência (AAAA-MM-01) e categoria (id ou "sem"). */
+export interface TransactionFilter {
+  month?: string;
+  category?: number | "sem";
+}
+
+function filterSql(sql: Sql, f: TransactionFilter) {
+  return sql`
+    ${f.month ? sql`and t.month = ${f.month}::date` : sql``}
+    ${f.category === "sem" ? sql`and t.category_id is null` : typeof f.category === "number" ? sql`and t.category_id = ${f.category}` : sql``}
+  `;
+}
+
+export async function listTransactions(sql: Sql, { limit = 200, offset = 0, filter = {} as TransactionFilter } = {}): Promise<TransactionRow[]> {
   const rows = await sql<
     {
       id: string;
@@ -248,7 +261,7 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
            to_char(t.month, 'YYYY-MM-DD') as month, a.kind, a.source
     from transactions t join accounts a on a.id = t.account_id
     left join categories c on c.id = t.category_id
-    where t.duplicate_of is null
+    where t.duplicate_of is null ${filterSql(sql, filter)}
     order by t.date desc, t.id desc
     limit ${limit} offset ${offset}
   `;
@@ -270,7 +283,7 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
   }));
 }
 
-export async function countTransactions(sql: Sql): Promise<number> {
-  const [row] = await sql<{ n: string }[]>`select count(*) as n from transactions where duplicate_of is null`;
+export async function countTransactions(sql: Sql, filter: TransactionFilter = {}): Promise<number> {
+  const [row] = await sql<{ n: string }[]>`select count(*) as n from transactions t where t.duplicate_of is null ${filterSql(sql, filter)}`;
   return Number(row?.n ?? 0);
 }

@@ -8,6 +8,8 @@ import {
   categorize,
   listCategories,
   listForReview,
+  listMonths,
+  monthSummary,
   listSuspects,
   resolveSuspect,
   setCategory,
@@ -104,7 +106,11 @@ const app = createApp({
   ledger: {
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
-    count: () => countTransactions(sql),
+    count: (filter) => countTransactions(sql, filter),
+  },
+  month: {
+    months: () => listMonths(sql, config.JATOBA_CURRENCY),
+    summary: (month) => monthSummary(sql, month, config.JATOBA_CURRENCY),
   },
   review: {
     categories: () => listCategories(sql),

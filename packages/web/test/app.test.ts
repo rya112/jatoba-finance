@@ -1,7 +1,27 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp, SESSION_COOKIE } from "../src/app.js";
 import { Credentials, LoginLimiter, MemorySessionStore } from "../src/auth.js";
-import { DuplicateError, readStatementFile, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { DuplicateError, readStatementFile, type Category, type ImportOutcome, type MonthSummary, type ReviewRow, type SuspectPair, type TransactionFilter, type TransactionRow } from "@jatoba/core";
+
+const NOVEMBRO: MonthSummary = {
+  month: "2026-11-01",
+  currency: "BRL",
+  income: 801500,
+  expenses: 55000,
+  net: 746500,
+  expenseCategories: [
+    { categoryId: 1, name: "Mercado", kind: "despesa", total: 40000, count: 1, outflow: 40000, inflow: 0, previousAverage: 32000 },
+    { categoryId: 4, name: "Restaurantes <b>e</b> delivery", kind: "despesa", total: 12000, count: 2, outflow: 12000, inflow: 0, previousAverage: 20000 },
+  ],
+  incomeCategories: [{ categoryId: 2, name: "Salário", kind: "receita", total: 800000, count: 1, outflow: 0, inflow: 800000, previousAverage: 750000 }],
+  movements: [{ categoryId: 3, name: "Pagamento de fatura", kind: "movimentacao", total: 0, count: 2, outflow: 250000, inflow: 250000 }],
+  uncategorized: { outflow: 3000, outflowCount: 1, inflow: 1500, inflowCount: 1 },
+  coverage: [
+    { accountId: 2, name: "Cartão C6", kind: "cartao", count: 6 },
+    { accountId: 1, name: "Conta final 8554", kind: "conta", count: 5 },
+  ],
+  previousMonths: ["2026-10-01", "2026-09-01"],
+};
 
 const CATEGORIES: Category[] = [
   { id: 1, name: "Mercado", kind: "despesa" },
@@ -87,6 +107,10 @@ const ORIGIN = "http://localhost";
 let databaseUp: boolean;
 let ledger: ReturnType<typeof memoryLedger>;
 let review: ReturnType<typeof memoryReview>;
+let monthCalls: string[];
+let months: string[];
+let summaries: Record<string, MonthSummary>;
+let lastFilter: TransactionFilter | undefined;
 
 async function makeApp(publicUrl?: string) {
   return createApp({
@@ -97,8 +121,25 @@ async function makeApp(publicUrl?: string) {
     publicUrl,
     checkDatabase: async () => databaseUp,
     clientKey: () => "teste",
-    ledger,
+    ledger: {
+      ...ledger,
+      list: async (opts: { limit?: number; offset?: number; filter?: TransactionFilter } = {}) => {
+        lastFilter = opts.filter;
+        return ledger.list(opts);
+      },
+      count: async (filter?: TransactionFilter) => {
+        lastFilter = filter;
+        return ledger.count();
+      },
+    },
     review,
+    month: {
+      months: async () => months,
+      summary: async (m: string) => {
+        monthCalls.push(m);
+        return summaries[m]!;
+      },
+    },
   });
 }
 
@@ -121,6 +162,13 @@ beforeEach(() => {
   databaseUp = true;
   ledger = memoryLedger();
   review = memoryReview();
+  monthCalls = [];
+  months = ["2026-11-01", "2026-10-01", "2026-09-01"];
+  summaries = {
+    "2026-11-01": NOVEMBRO,
+    "2026-10-01": { ...NOVEMBRO, month: "2026-10-01", previousMonths: ["2026-09-01"], coverage: [{ accountId: 2, name: "Cartão C6", kind: "cartao", count: 0 }, { accountId: 1, name: "Conta final 8554", kind: "conta", count: 9 }] },
+  };
+  lastFilter = undefined;
 });
 
 describe("app", () => {
@@ -448,4 +496,80 @@ describe("possíveis duplicados na página", () => {
     expect(html).toContain("1 possível(is) duplicado(s)");
   });
 
+});
+
+describe("tela do Mês", () => {
+  const get = async (path: string) => {
+    const { app, cookie } = await loggedIn();
+    return app.request(path, { headers: { Cookie: cookie } });
+  };
+
+  it("exige login", async () => {
+    const app = await makeApp();
+    expect((await app.request("/mes")).status).toBe(303);
+  });
+
+  it("sem mês pedido, mostra o mais recente com dados", async () => {
+    const html = await (await get("/mes")).text();
+    expect(monthCalls).toEqual(["2026-11-01"]);
+    expect(html).toContain("<h1>Novembro de 2026</h1>");
+  });
+
+  it("resumo, categorias, sem categoria, movimentações e comparação", async () => {
+    const html = (await (await get("/mes?m=2026-11")).text()).replace(/\s/g, " ");
+    expect(html).toContain("R$ 8.015,00"); // entradas
+    expect(html).toContain("R$ 550,00"); // saídas
+    expect(html).toContain("R$ 7.465,00"); // saldo
+    expect(html).toContain('href="/lancamentos?mes=2026-11&amp;categoria=1">Mercado</a>');
+    expect(html).toContain('href="/lancamentos?mes=2026-11&amp;categoria=sem">Sem categoria</a>');
+    expect(html).toContain("Restaurantes &#60;b&#62;e&#60;/b&#62; delivery");
+    expect(html).toContain('<span class="pior">+25%</span>'); // mercado subiu: ruim
+    expect(html).toContain('<span class="melhor">−40%</span>'); // restaurante caiu: bom
+    expect(html).toContain('<span class="melhor">+7%</span>'); // salário subiu: bom
+    expect(html).toContain("Pagamento de fatura");
+    expect(html).toContain("2 lançamento(s) sem categoria estão contados nos totais");
+    expect(html).toContain("outubro de 2026, setembro de 2026");
+    expect(html).not.toContain("Mês incompleto");
+  });
+
+  it("navega entre meses com dados", async () => {
+    const html = await (await get("/mes?m=2026-10")).text();
+    expect(html).toContain('href="/mes?m=2026-09" rel="prev"');
+    expect(html).toContain('href="/mes?m=2026-11" rel="next"');
+    const newest = await (await get("/mes?m=2026-11")).text();
+    expect(newest).not.toContain('rel="next"');
+  });
+
+  it("avisa quando falta o extrato de uma conta no mês", async () => {
+    const html = await (await get("/mes?m=2026-10")).text();
+    expect(html).toContain("Mês incompleto");
+    expect(html).toContain("Cartão C6 não tem lançamentos neste mês (falta importar a fatura?)");
+  });
+
+  it("mês inválido ou sem dados vai para o mais recente", async () => {
+    await get("/mes?m=2030-01");
+    await get("/mes?m=abc");
+    expect(monthCalls).toEqual(["2026-11-01", "2026-11-01"]);
+  });
+
+  it("sem nenhum lançamento, convida a importar", async () => {
+    months = [];
+    const html = await (await get("/mes")).text();
+    expect(html).toContain("Importe um extrato");
+  });
+
+  it("Lançamentos aceita os filtros vindos do Mês e preserva na paginação", async () => {
+    const html = await (await get("/lancamentos?mes=2026-11&categoria=sem")).text();
+    expect(lastFilter).toEqual({ month: "2026-11-01", category: "sem" });
+    await upload((await loggedIn()).app, (await loggedIn()).cookie, "x.ofx", OFX);
+    expect(html).toContain("Filtrando:");
+    const byCategory = await get("/lancamentos?mes=2026-11&categoria=1");
+    expect(await byCategory.text()).toContain("<strong>Mercado</strong>");
+    expect(lastFilter).toEqual({ month: "2026-11-01", category: 1 });
+  });
+
+  it("filtros inválidos são ignorados", async () => {
+    await get("/lancamentos?mes=2026-13&categoria=1;drop");
+    expect(lastFilter).toEqual({});
+  });
 });

@@ -96,6 +96,13 @@ check "aprovar em lote" "$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte
 check "aprovou só os com sugestão" "$(sql "select count(*) from transactions where not reviewed")" "$((PENDING_BEFORE - SUGGESTED))"
 check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: https://malicioso.example' -o "$TMP/descarte" -w '%{http_code}' --data "id=1" "$URL/revisar/aprovar")" "403"
 
+echo "== Mês"
+curl -s -b "$JAR" "$URL/mes" > "$TMP/mes.html"
+grep -q "Para onde foi o dinheiro" "$TMP/mes.html" && ok "página do Mês abre" || fail "Mês não abriu"
+grep -q "Novembro de 2026" "$TMP/mes.html" && ok "mostra o mês mais recente (fatura de nov/2026)" || fail "mês errado: $(grep -o '<h1>[^<]*' "$TMP/mes.html")"
+grep -q 'categoria=sem' "$TMP/mes.html" && ok "liga os sem categoria à lista filtrada" || fail "sem link de sem categoria"
+curl -s -b "$JAR" "$URL/lancamentos?mes=2026-10&categoria=sem" | grep -q "Filtrando:" && ok "Lançamentos filtra por mês e categoria" || fail "filtro não aplicado"
+
 dc restart app >/dev/null 2>&1
 wait_healthy
 check "reinício não muda categorias revisadas" "$(sql "select count(*) from transactions where description = 'POSTO EXEMPLO' and category_id = $TRANSPORTE")" "$(echo "$POSTO_IDS" | tr ',' '\n' | wc -l | tr -d ' ')"

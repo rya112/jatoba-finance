@@ -31,6 +31,7 @@ export {
   type ImportOutcome,
   type ImportSummary,
   type TransactionRow,
+  type TransactionFilter,
 } from "./import/importer.js";
 export {
   normalizeText,
@@ -54,3 +55,4 @@ export {
   type Suggestion,
 } from "./categories.js";
 export { flagSuspects, listSuspects, resolveSuspect, countSuspects, DuplicateError, type SuspectPair } from "./duplicates.js";
+export { monthSummary, listMonths, addMonths, parseMonth, type MonthSummary, type CategoryTotal } from "./month.js";

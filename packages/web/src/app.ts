@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
-import { homePage, importPage, loginPage, reviewPage, transactionsPage } from "./pages.js";
+import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type MonthSummary, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { homePage, importPage, loginPage, monthPage, reviewPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 export const PAGE_SIZE = 50;
@@ -22,8 +22,12 @@ export interface AppDeps {
   clientKey: (c: Context) => string;
   ledger: {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
-    list: (opts?: { limit?: number; offset?: number }) => Promise<TransactionRow[]>;
-    count: () => Promise<number>;
+    list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
+    count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  month: {
+    months: () => Promise<string[]>;
+    summary: (month: string) => Promise<MonthSummary>;
   };
   review: {
     categories: () => Promise<Category[]>;
@@ -157,12 +161,33 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.get("/lancamentos", async (c) => {
-    const total = await deps.ledger.count();
+    // Filtros opcionais: ?mes=AAAA-MM e ?categoria=<id>|sem (vindos da tela do Mês).
+    const filter: TransactionFilter = {};
+    const mes = c.req.query("mes");
+    if (mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) filter.month = `${mes}-01`;
+    const categoria = c.req.query("categoria");
+    if (categoria === "sem") filter.category = "sem";
+    else if (categoria && /^\d{1,9}$/.test(categoria)) filter.category = Number(categoria);
+    const categoryName =
+      filter.category === "sem" ? "Sem categoria" : typeof filter.category === "number" ? (await deps.review.categories()).find((x) => x.id === filter.category)?.name : undefined;
+    const query = [filter.month ? `mes=${mes}` : "", filter.category !== undefined ? `categoria=${filter.category}` : ""].filter(Boolean).map((q) => `${q}&amp;`).join("");
+
+    const total = await deps.ledger.count(filter);
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const requested = Number.parseInt(c.req.query("pagina") ?? "1", 10);
     const page = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), pages) : 1;
-    const rows = await deps.ledger.list({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
-    return c.html(transactionsPage(rows, total, { page, pages, pageSize: PAGE_SIZE }));
+    const rows = await deps.ledger.list({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, filter });
+    return c.html(transactionsPage(rows, total, { page, pages, pageSize: PAGE_SIZE }, { month: filter.month, categoryName, query }));
+  });
+
+  app.get("/mes", async (c) => {
+    const months = await deps.month.months();
+    if (months.length === 0) return c.html(monthPage(undefined, months));
+    const asked = c.req.query("m");
+    const valid = asked && /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? `${asked}-01` : undefined;
+    // Sem mês pedido, ou pedido sem dados: o mais recente com lançamentos.
+    const month = valid && months.includes(valid) ? valid : months[0]!;
+    return c.html(monthPage(await deps.month.summary(month), months));
   });
 
   const showReview = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {

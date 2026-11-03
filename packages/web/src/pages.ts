@@ -1,13 +1,14 @@
-import { formatMoney, normalizeText, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type Category, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-type Section = "inicio" | "importar" | "revisar" | "lancamentos";
+type Section = "inicio" | "mes" | "importar" | "revisar" | "lancamentos";
 
 const NAV: { id: Section; href: string; label: string }[] = [
   { id: "inicio", href: "/", label: "Início" },
+  { id: "mes", href: "/mes", label: "Mês" },
   { id: "importar", href: "/importar", label: "Importar" },
   { id: "revisar", href: "/revisar", label: "Revisar" },
   { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
@@ -100,6 +101,17 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .duplicado .lado { background: var(--painel); border-radius: 0.5rem; padding: 0.5rem 0.75rem; overflow-wrap: anywhere; }
   .duplicado .lado small { display: block; color: var(--suave); }
   .duplicado form { display: inline-flex; margin: 0.6rem 0.6rem 0 0; }
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; margin-top: 1.25rem; }
+  .caixa { border: 1px solid var(--linha); border-radius: 0.75rem; padding: 0.8rem 1rem; display: grid; gap: 0.2rem; }
+  .caixa strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+  table.categorias td:first-child { min-width: 12rem; }
+  .barra-celula { width: 30%; min-width: 4rem; }
+  .barra { display: block; height: 0.55rem; border-radius: 1rem; background: var(--cerne); opacity: 0.75; }
+  .atencao td { background: var(--painel); }
+  .melhor { color: var(--entrada); }
+  .pior { color: var(--erro); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .filtro { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -137,7 +149,8 @@ export function homePage(version: string, transactionCount: number, pendingRevie
           pendingReview > 0 ? `<p><a href="/revisar">${pendingReview.toLocaleString("pt-BR")} lançamento(s) para revisar</a>.</p>` : ""
         }`
   }
-  <p class="suave">As telas do mês e das metas chegam nas próximas versões.</p>
+  ${transactionCount > 0 ? '<p><a href="/mes">Ver o resumo do mês</a>.</p>' : ""}
+  <p class="suave">A tela de metas chega na próxima versão.</p>
   <p class="suave rodape">Versão ${escapeHtml(version)}</p>`,
     { section: "inicio" },
   );
@@ -201,10 +214,10 @@ export function importPage(opts: { outcome?: ImportOutcome; error?: string } = {
 }
 
 /** Navegação entre páginas: primeira, anterior, "página X de Y", próxima, última. */
-function pagination(page: number, pages: number): string {
+function pagination(page: number, pages: number, query = ""): string {
   if (pages <= 1) return "";
   const link = (target: number, label: string, rel?: string) =>
-    `<a href="/lancamentos?pagina=${target}"${rel ? ` rel="${rel}"` : ""}>${label}</a>`;
+    `<a href="/lancamentos?${query}pagina=${target}"${rel ? ` rel="${rel}"` : ""}>${label}</a>`;
   const off = (label: string) => `<span class="desligado" aria-disabled="true">${label}</span>`;
   return `<nav class="paginas" aria-label="Páginas">
     ${page > 1 ? link(1, "« Primeira") : off("« Primeira")}
@@ -219,7 +232,15 @@ export function transactionsPage(
   rows: TransactionRow[],
   total: number,
   paging: { page: number; pages: number; pageSize: number } = { page: 1, pages: 1, pageSize: rows.length },
+  filter: { month?: string; categoryName?: string; query?: string } = {},
 ): string {
+  const filterNote = filter.month || filter.categoryName
+    ? `<p class="filtro"><span>Filtrando: ${[filter.month ? `<strong>${escapeHtml(monthTitle(filter.month))}</strong>` : "", filter.categoryName ? `<strong>${escapeHtml(filter.categoryName)}</strong>` : ""].filter(Boolean).join(" · ")}</span>
+      <a href="/lancamentos">limpar filtro</a>${filter.month ? ` · <a href="/mes?m=${filter.month.slice(0, 7)}">voltar ao mês</a>` : ""}</p>`
+    : "";
+  if (total === 0 && filterNote) {
+    return layout("Lançamentos · Jatobá Finance", `  <h1>Lançamentos</h1>${filterNote}<p>Nenhum lançamento com este filtro.</p>`, { section: "lancamentos" });
+  }
   if (total === 0) {
     return layout(
       "Lançamentos · Jatobá Finance",
@@ -255,12 +276,13 @@ export function transactionsPage(
         ? `, mostrando de ${((paging.page - 1) * paging.pageSize + 1).toLocaleString("pt-BR")} a ${((paging.page - 1) * paging.pageSize + rows.length).toLocaleString("pt-BR")}`
         : ""
     }, do mais recente para o mais antigo. Entradas em verde; saídas negativas.</p>
-  ${pagination(paging.page, paging.pages)}
+  ${filterNote}
+  ${pagination(paging.page, paging.pages, filter.query)}
   <div class="tabela"><table>
     <thead><tr><th scope="col">Data</th><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Conta</th><th scope="col" class="valor">Valor</th></tr></thead>
     <tbody>${body}</tbody>
   </table></div>
-  ${pagination(paging.page, paging.pages)}`,
+  ${pagination(paging.page, paging.pages, filter.query)}`,
     { section: "lancamentos", wide: true },
   );
 }
@@ -386,5 +408,117 @@ export function reviewPage(opts: {
   <ul class="cartoes">${cards}</ul>
   ${more}`,
     { section: "revisar", wide: true },
+  );
+}
+
+const MONTH_NAMES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** "2026-11-01" → "novembro de 2026". */
+export function monthTitle(iso: string): string {
+  return `${MONTH_NAMES[Number(iso.slice(5, 7)) - 1]} de ${iso.slice(0, 4)}`;
+}
+
+function money(cents: number, currency: string): string {
+  return escapeHtml(formatMoney(cents, "pt-BR", currency));
+}
+
+/** Variação em relação à média: "+12%" / "−8%" / "novo". */
+function comparison(total: number, average: number | undefined, kind: "despesa" | "receita"): string {
+  if (average === undefined) return '<span class="suave">—</span>';
+  if (average <= 0) return total > 0 ? '<span class="suave">novo</span>' : '<span class="suave">—</span>';
+  const pct = Math.round(((total - average) / average) * 100);
+  if (pct === 0) return '<span class="suave">igual</span>';
+  // Para despesa, subir é ruim; para receita, subir é bom.
+  const good = kind === "despesa" ? pct < 0 : pct > 0;
+  return `<span class="${good ? "melhor" : "pior"}">${pct > 0 ? "+" : "−"}${Math.abs(pct)}%</span>`;
+}
+
+function categoryTable(rows: CategoryTotal[], total: number, currency: string, month: string, kind: "despesa" | "receita", extra?: { label: string; value: number; count: number }): string {
+  const max = Math.max(1, ...rows.map((r) => r.total), extra?.value ?? 0);
+  const link = (id: number | "sem") => `/lancamentos?mes=${month.slice(0, 7)}&amp;categoria=${id}`;
+  const line = (name: string, href: string, value: number, count: number, cmp: string, highlight = false) => `<tr${highlight ? ' class="atencao"' : ""}>
+      <td><a href="${href}">${escapeHtml(name)}</a> <span class="suave">· ${count}</span></td>
+      <td class="barra-celula"><span class="barra" style="width:${Math.max(0, Math.round((value / max) * 100))}%"></span></td>
+      <td class="valor">${money(value, currency)}</td>
+      <td class="valor suave">${total > 0 ? Math.round((value / total) * 100) : 0}%</td>
+      <td class="valor">${cmp}</td>
+    </tr>`;
+  const body = [
+    ...rows.map((r) => line(r.name, link(r.categoryId), r.total, r.count, comparison(r.total, r.previousAverage, kind))),
+    extra && extra.count > 0 ? line(extra.label, link("sem"), extra.value, extra.count, '<a href="/revisar">revisar</a>', true) : "",
+  ].join("");
+  if (!body) return '<p class="suave">Nada neste mês.</p>';
+  return `<div class="tabela"><table class="categorias">
+    <thead><tr><th scope="col">Categoria</th><th scope="col"><span class="sr">Proporção</span></th><th scope="col" class="valor">Valor</th><th scope="col" class="valor">Fatia</th><th scope="col" class="valor" title="Em relação à média dos meses anteriores">vs. média</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`;
+}
+
+export function monthPage(summary: MonthSummary | undefined, months: string[]): string {
+  if (!summary) {
+    return layout(
+      "Mês · Jatobá Finance",
+      `  <h1>Mês</h1>
+  <p>Nenhum lançamento ainda. <a href="/importar">Importe um extrato</a> para ver o resumo do mês.</p>`,
+      { section: "mes" },
+    );
+  }
+  const s = summary;
+  const index = months.indexOf(s.month);
+  const newer = index > 0 ? months[index - 1] : undefined;
+  const older = index >= 0 && index < months.length - 1 ? months[index + 1] : undefined;
+  const nav = `<nav class="paginas" aria-label="Meses">
+    ${older ? `<a href="/mes?m=${older.slice(0, 7)}" rel="prev">‹ ${escapeHtml(monthTitle(older))}</a>` : '<span class="desligado">‹</span>'}
+    <span aria-current="page">${escapeHtml(monthTitle(s.month))}</span>
+    ${newer ? `<a href="/mes?m=${newer.slice(0, 7)}" rel="next">${escapeHtml(monthTitle(newer))} ›</a>` : '<span class="desligado">›</span>'}
+  </nav>`;
+
+  const missing = s.coverage.filter((c) => c.count === 0);
+  const coverage = missing.length
+    ? `<div class="painel"><p><strong>Mês incompleto:</strong> ${missing
+        .map((c) => `${escapeHtml(c.name)} não tem lançamentos neste mês${c.kind === "cartao" ? " (falta importar a fatura?)" : ""}`)
+        .join("; ")}. <a href="/importar">Importar</a></p></div>`
+    : "";
+  const uncategorizedCount = s.uncategorized.outflowCount + s.uncategorized.inflowCount;
+  const uncategorized = uncategorizedCount
+    ? `<p class="suave">${uncategorizedCount} lançamento(s) sem categoria estão contados nos totais. <a href="/revisar">Revisar</a> deixa o resumo mais certo.</p>`
+    : "";
+
+  const movements = s.movements.length
+    ? `<div class="tabela"><table>
+    <thead><tr><th scope="col">Movimentação</th><th scope="col" class="valor">Saiu</th><th scope="col" class="valor">Entrou</th></tr></thead>
+    <tbody>${s.movements
+      .map(
+        (m) => `<tr><td><a href="/lancamentos?mes=${s.month.slice(0, 7)}&amp;categoria=${m.categoryId}">${escapeHtml(m.name)}</a> <span class="suave">· ${m.count}</span></td>
+        <td class="valor">${m.outflow ? money(m.outflow, s.currency) : "—"}</td><td class="valor">${m.inflow ? money(m.inflow, s.currency) : "—"}</td></tr>`,
+      )
+      .join("")}</tbody>
+  </table></div>`
+    : '<p class="suave">Nenhuma neste mês.</p>';
+
+  const previous = s.previousMonths.length
+    ? `“vs. média” compara com a média de ${s.previousMonths.map(monthTitle).join(", ")}.`
+    : "Ainda não há meses anteriores para comparar.";
+
+  return layout(
+    `${monthTitle(s.month)} · Jatobá Finance`,
+    `  ${nav}
+  <h1>${escapeHtml(monthTitle(s.month).replace(/^./, (c) => c.toUpperCase()))}</h1>
+  ${coverage}
+  <div class="resumo">
+    <div class="caixa"><span class="suave">Entradas</span><strong class="entrada">${money(s.income, s.currency)}</strong></div>
+    <div class="caixa"><span class="suave">Saídas</span><strong>${money(s.expenses, s.currency)}</strong></div>
+    <div class="caixa"><span class="suave">Saldo do mês</span><strong class="${s.net >= 0 ? "entrada" : "pior"}">${money(s.net, s.currency)}</strong></div>
+  </div>
+  ${uncategorized}
+  <h2>Para onde foi o dinheiro</h2>
+  ${categoryTable(s.expenseCategories, s.expenses, s.currency, s.month, "despesa", { label: "Sem categoria", value: s.uncategorized.outflow, count: s.uncategorized.outflowCount })}
+  <h2>De onde veio</h2>
+  ${categoryTable(s.incomeCategories, s.income, s.currency, s.month, "receita", { label: "Sem categoria", value: s.uncategorized.inflow, count: s.uncategorized.inflowCount })}
+  <h2>Movimentações</h2>
+  <p class="suave">Pagamento de fatura, transferências entre contas, aportes e resgates. Não contam como gasto nem como receita.</p>
+  ${movements}
+  <p class="suave rodape">Compras do cartão entram no mês de vencimento da fatura; lançamentos da conta, no mês da data. Estornos descontam da categoria da compra. ${previous}</p>`,
+    { section: "mes", wide: true },
   );
 }
