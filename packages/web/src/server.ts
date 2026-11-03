@@ -4,6 +4,11 @@ import { basename } from "node:path";
 import {
   ConfigError,
   MigrationError,
+  approveSuggestions,
+  categorize,
+  listCategories,
+  listForReview,
+  setCategory,
   connect,
   countTransactions,
   importFile,
@@ -78,6 +83,10 @@ try {
   throw error;
 }
 
+// Aplica descrições limpas e sugestões de categoria (também a lançamentos antigos, se as regras mudaram).
+const suggested = await categorize(sql);
+if (suggested > 0) console.log(`Sugestões de categoria atualizadas: ${suggested}`);
+
 const sessions = new PgSessionStore(sql);
 await sessions.purgeExpired();
 setInterval(() => void sessions.purgeExpired().catch(() => {}), 6 * 60 * 60_000).unref();
@@ -94,6 +103,12 @@ const app = createApp({
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
     count: () => countTransactions(sql),
+  },
+  review: {
+    categories: () => listCategories(sql),
+    list: (opts) => listForReview(sql, opts),
+    setCategory: (id, categoryId, opts) => setCategory(sql, id, categoryId, opts),
+    approve: (ids) => approveSuggestions(sql, ids),
   },
 });
 

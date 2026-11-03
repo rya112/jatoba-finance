@@ -99,7 +99,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importFile no Postgres", () => {
     await importFile(sql, "fatura.csv", fixture("c6-fatura-exemplo.csv"));
     await importFile(sql, "conta.ofx", fixture("ofx2-xml-utf8.ofx"));
     const [loja] = await sql`select * from transactions where description = 'LOJA EXEMPLO'`;
-    expect(loja).toMatchObject({ installment_current: 3, installment_total: 10, card_last4: "1111", bank_category: "Departamento", amount: "-19990" });
+    expect(loja).toMatchObject({ installment_current: 3, installment_total: 10, card_last4: "1111", bank_category: "Departamento / Desconto", amount: "-19990" });
     const [streaming] = await sql`select foreign_amount, foreign_currency, foreign_rate from transactions where description = 'STREAMING EXEMPLO'`;
     expect(streaming).toEqual({ foreign_amount: "-799", foreign_currency: "USD", foreign_rate: "5.62" });
 

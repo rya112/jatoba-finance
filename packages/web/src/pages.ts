@@ -1,14 +1,15 @@
-import { formatMoney, type ImportOutcome, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type Category, type ImportOutcome, type ReviewRow, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-type Section = "inicio" | "importar" | "lancamentos";
+type Section = "inicio" | "importar" | "revisar" | "lancamentos";
 
 const NAV: { id: Section; href: string; label: string }[] = [
   { id: "inicio", href: "/", label: "Início" },
   { id: "importar", href: "/importar", label: "Importar" },
+  { id: "revisar", href: "/revisar", label: "Revisar" },
   { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
 ];
 
@@ -78,6 +79,17 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   td.valor, th.valor { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.data { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .entrada { color: var(--entrada); }
+  .cartoes { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.75rem; }
+  .cartao { border: 1px solid var(--linha); border-radius: 0.75rem; padding: 0.9rem 1rem; }
+  .cartao .cabeca { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
+  .cartao .descricao { font-weight: 600; overflow-wrap: anywhere; }
+  .cartao .original { color: var(--suave); font-size: 0.85rem; overflow-wrap: anywhere; }
+  .cartao form { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.6rem; }
+  .cartao select { font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--linha); border-radius: 0.5rem; padding: 0.45rem 0.6rem; max-width: 100%; }
+  .cartao .regra { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; font-size: 0.9rem; color: var(--suave); width: 100%; }
+  .cartao .regra input[type=text] { padding: 0.35rem 0.5rem; font-size: 0.9rem; min-width: 10rem; flex: 1; }
+  .sugestao { font-size: 0.85rem; color: var(--suave); }
+  .sem-sugestao { border-left: 3px solid var(--cerne); }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -96,7 +108,7 @@ function brDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-export function homePage(version: string, transactionCount: number): string {
+export function homePage(version: string, transactionCount: number, pendingReview = 0): string {
   return layout(
     "Jatobá Finance",
     `  <h1>Jatobá Finance</h1>
@@ -104,7 +116,9 @@ export function homePage(version: string, transactionCount: number): string {
   ${
     transactionCount === 0
       ? `<p>Nenhum lançamento ainda. Comece <a href="/importar">importando um extrato</a> (OFX da conta ou CSV da fatura do C6).</p>`
-      : `<p>${transactionCount.toLocaleString("pt-BR")} lançamento(s) importado(s). <a href="/lancamentos">Ver lançamentos</a> ou <a href="/importar">importar mais</a>.</p>`
+      : `<p>${transactionCount.toLocaleString("pt-BR")} lançamento(s) importado(s). <a href="/lancamentos">Ver lançamentos</a> ou <a href="/importar">importar mais</a>.</p>${
+          pendingReview > 0 ? `<p><a href="/revisar">${pendingReview.toLocaleString("pt-BR")} lançamento(s) para revisar</a>.</p>` : ""
+        }`
   }
   <p class="suave">As telas do mês e das metas chegam nas próximas versões.</p>
   <p class="suave rodape">Versão ${escapeHtml(version)}</p>`,
@@ -186,7 +200,8 @@ export function transactionsPage(rows: TransactionRow[], total: number): string 
         .join("");
       return `<tr>
         <td class="data">${brDate(r.date)}</td>
-        <td>${escapeHtml(r.description)}${tags}</td>
+        <td>${escapeHtml(r.cleanDescription ?? r.description)}${tags}</td>
+        <td class="suave">${r.categoryName ? escapeHtml(r.categoryName) + (r.reviewed ? "" : ' <span class="etiqueta">sugerida</span>') : "—"}</td>
         <td class="suave">${escapeHtml(r.accountName)}</td>
         <td class="valor${r.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(r.amount, "pt-BR", r.currency))}</td>
       </tr>`;
@@ -197,9 +212,104 @@ export function transactionsPage(rows: TransactionRow[], total: number): string 
     `  <h1>Lançamentos</h1>
   <p class="suave">${total.toLocaleString("pt-BR")} lançamento(s)${rows.length < total ? `, mostrando os ${rows.length} mais recentes` : ""}. Entradas em verde; saídas negativas.</p>
   <div class="tabela"><table>
-    <thead><tr><th scope="col">Data</th><th scope="col">Descrição</th><th scope="col">Conta</th><th scope="col" class="valor">Valor</th></tr></thead>
+    <thead><tr><th scope="col">Data</th><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Conta</th><th scope="col" class="valor">Valor</th></tr></thead>
     <tbody>${body}</tbody>
   </table></div>`,
     { section: "lancamentos", wide: true },
+  );
+}
+
+const KIND_LABEL: Record<Category["kind"], string> = {
+  despesa: "Despesas",
+  receita: "Receitas",
+  movimentacao: "Movimentações (não contam como gasto)",
+};
+
+function categorySelect(categories: Category[], selected: number | null): string {
+  const groups = (["despesa", "receita", "movimentacao"] as const)
+    .map((kind) => {
+      const options = categories
+        .filter((c) => c.kind === kind)
+        .map((c) => `<option value="${c.id}"${c.id === selected ? " selected" : ""}>${escapeHtml(c.name)}</option>`)
+        .join("");
+      return `<optgroup label="${KIND_LABEL[kind]}">${options}</optgroup>`;
+    })
+    .join("");
+  const placeholder = selected === null ? '<option value="" selected>Escolha a categoria</option>' : "";
+  return `<select name="categoria" required aria-label="Categoria">${placeholder}${groups}</select>`;
+}
+
+function suggestionNote(r: ReviewRow, categories: Category[]): string {
+  if (r.categoryId === null) return '<span class="sugestao">Sem sugestão.</span>';
+  const name = categories.find((c) => c.id === r.categoryId)?.name ?? "";
+  if (r.categorySource === "regra") {
+    return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, pela regra “${escapeHtml(r.rulePattern ?? "")}”.</span>`;
+  }
+  return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, pela categoria do banco (${escapeHtml(r.bankCategory ?? "")}).</span>`;
+}
+
+export function reviewPage(opts: {
+  rows: ReviewRow[];
+  total: number;
+  withSuggestion: number;
+  categories: Category[];
+  message?: string;
+  error?: string;
+}): string {
+  const { rows, total, withSuggestion, categories } = opts;
+  const flash = [
+    opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
+    opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : "",
+  ].join("");
+
+  if (total === 0) {
+    return layout(
+      "Revisar · Jatobá Finance",
+      `  <h1>Revisar</h1>${flash}
+  <p>Tudo revisado. Quando importar novos extratos, os lançamentos aparecem aqui.</p>`,
+      { section: "revisar" },
+    );
+  }
+
+  const suggestedHere = rows.filter((r) => r.categoryId !== null).map((r) => r.id);
+  const approveAll = suggestedHere.length
+    ? `<form method="post" action="/revisar/aprovar">${suggestedHere
+        .map((id) => `<input type="hidden" name="id" value="${escapeHtml(id)}">`)
+        .join("")}<button type="submit">Aprovar as ${suggestedHere.length} sugestões desta página</button></form>`
+    : "";
+
+  const cards = rows
+    .map((r) => {
+      const showOriginal = normalizeText(r.cleanDescription) !== normalizeText(r.description);
+      const tags = r.installment ? `<span class="etiqueta">parcela ${escapeHtml(r.installment)}</span>` : "";
+      return `<li class="cartao${r.categoryId === null ? " sem-sugestao" : ""}">
+      <div class="cabeca">
+        <span class="descricao">${escapeHtml(r.cleanDescription)}${tags}</span>
+        <span class="valor${r.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(r.amount, "pt-BR", r.currency))}</span>
+      </div>
+      <div class="original">${brDate(r.date)} · ${escapeHtml(r.accountName)}${showOriginal ? ` · original: ${escapeHtml(r.description)}` : ""}</div>
+      <form method="post" action="/revisar/${escapeHtml(r.id)}">
+        ${categorySelect(categories, r.categoryId)}
+        <button type="submit">Salvar</button>
+        ${suggestionNote(r, categories)}
+        <label class="regra"><input type="checkbox" name="criar_regra" value="1"> Usar sempre que a descrição contiver
+          <input type="text" name="regra" value="${escapeHtml(normalizeText(r.cleanDescription))}" aria-label="Texto da regra"></label>
+      </form>
+    </li>`;
+    })
+    .join("");
+
+  const more = rows.length < total
+    ? `<p class="suave">Mostrando ${rows.length} de ${total.toLocaleString("pt-BR")}. Salve ou aprove estes para ver os próximos.</p>`
+    : "";
+  return layout(
+    "Revisar · Jatobá Finance",
+    `  <h1>Revisar</h1>${flash}
+  <p>${total.toLocaleString("pt-BR")} lançamento(s) para revisar, ${withSuggestion.toLocaleString("pt-BR")} com sugestão. Os sem sugestão aparecem primeiro.</p>
+  <p class="suave">Confira a categoria e salve. Marque “usar sempre” para criar uma regra: ela vale para todos os lançamentos parecidos, inclusive os próximos.</p>
+  ${approveAll}
+  <ul class="cartoes">${cards}</ul>
+  ${more}`,
+    { section: "revisar", wide: true },
   );
 }

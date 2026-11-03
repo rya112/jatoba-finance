@@ -23,9 +23,9 @@ ok "Jatobá de teste no ar"
 check "migração da importação aplicada" "$(sql "select count(*) from schema_migrations where id = '0002_import'")" "1"
 
 echo "== Login"
-check "importar sem login é recusado" "$(curl -s -o /dev/null -w '%{http_code}' -H "Origin: $URL" -F "arquivo=@$FIX/cartao-exemplo.ofx" "$URL/importar")" "401"
-check "login" "$(curl -s -c "$JAR" -o /dev/null -w '%{http_code}' -H "Origin: $URL" --data-urlencode "usuario=$USER_" --data-urlencode "senha=$PASS_" "$URL/entrar")" "303"
-check "página Importar abre" "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' "$URL/importar")" "200"
+check "importar sem login é recusado" "$(curl -s -o "$TMP/descarte" -w '%{http_code}' -H "Origin: $URL" -F "arquivo=@$FIX/cartao-exemplo.ofx" "$URL/importar")" "401"
+check "login" "$(curl -s -c "$JAR" -o "$TMP/descarte" -w '%{http_code}' -H "Origin: $URL" --data-urlencode "usuario=$USER_" --data-urlencode "senha=$PASS_" "$URL/entrar")" "303"
+check "página Importar abre" "$(curl -s -b "$JAR" -o "$TMP/descarte" -w '%{http_code}' "$URL/importar")" "200"
 
 echo "== OFX"
 check "envio do OFX do cartão" "$(send "$FIX/cartao-exemplo.ofx")" "200"
@@ -56,7 +56,7 @@ echo "== Erros"
 printf 'Data,Valor\n01/10/2026,1\n' > "$TMP/planilha.csv"
 check "formato desconhecido é recusado" "$(send "$TMP/planilha.csv")" "422"
 [ "$(page 'Formato não reconhecido')" -ge 1 ] && ok "explica o erro na página" || fail "sem mensagem de erro"
-check "envio de outro site é bloqueado" "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Origin: https://malicioso.example' -F "arquivo=@$FIX/cartao-exemplo.ofx" "$URL/importar")" "403"
+check "envio de outro site é bloqueado" "$(curl -s -b "$JAR" -o "$TMP/descarte" -w '%{http_code}' -H 'Origin: https://malicioso.example' -F "arquivo=@$FIX/cartao-exemplo.ofx" "$URL/importar")" "403"
 head -c 11000000 /dev/zero > "$TMP/grande.ofx"
 check "arquivo acima de 10 MB é recusado" "$(send "$TMP/grande.ofx")" "413"
 check "nada entrou com os erros" "$(sql "select count(*) from transactions")" "18"
@@ -67,6 +67,38 @@ grep -q "PADARIA EXEMPLO" "$TMP/lancamentos.html" && ok "lista mostra os lançam
 grep -q "parcela 3/10" "$TMP/lancamentos.html" && ok "lista mostra a parcela" || fail "lista sem parcela"
 grep -q "18 lançamento" "$TMP/lancamentos.html" && ok "lista mostra o total" || fail "lista sem total"
 check "contas sem número completo" "$(sql "select count(*) from accounts where last4 is not null and length(last4) > 4")" "0"
+
+echo "== Categorias e revisão"
+send "$FIX/banco-exemplo-corrente.ofx" > /dev/null
+check "regra do sistema: pagamento de fatura" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'PAGAMENTO FATURA CARTAO EXEMPLO'")" "Pagamento de fatura"
+check "regra do sistema: salário" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description like 'CREDITO SALARIO%'")" "Salário"
+check "categoria do C6: mercado" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'MERCADO EXEMPLO'")" "Mercado"
+check "descrição limpa guardada" "$(sql "select clean_description from transactions where description like 'COMPRA CARTAO DEBITO SUPERMERCADO%'")" "SUPERMERCADO EXEMPLO SAO PAULO"
+curl -s -b "$JAR" "$URL/lancamentos" | grep -q "SUPERMERCADO EXEMPLO SAO PAULO" && ok "lista mostra a descrição limpa" || fail "lista sem descrição limpa"
+
+curl -s -b "$JAR" "$URL/revisar" > "$TMP/revisar.html"
+grep -q "para revisar" "$TMP/revisar.html" && ok "página Revisar abre" || fail "Revisar não abriu"
+grep -q "pela regra “FATURA”" "$TMP/revisar.html" && ok "mostra a origem da sugestão" || fail "sem origem da sugestão"
+
+POSTO_IDS="$(sql "select string_agg(id::text, ',' order by id) from transactions where description = 'POSTO EXEMPLO'")"
+FIRST="${POSTO_IDS%%,*}"
+TRANSPORTE="$(sql "select id from categories where name = 'Transporte'")"
+CODE="$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "categoria=$TRANSPORTE&criar_regra=1&regra=POSTO+EXEMPLO" "$URL/revisar/$FIRST")"
+check "salvar categoria com regra" "$CODE" "303"
+check "lançamento ficou manual e revisado" "$(sql "select category_source || ' ' || reviewed from transactions where id = $FIRST")" "manual true"
+check "regra do usuário criada" "$(sql "select count(*) from rules where origin = 'usuario' and pattern = 'POSTO EXEMPLO'")" "1"
+check "nenhum POSTO ficou sem categoria" "$(sql "select count(*) from transactions where description = 'POSTO EXEMPLO' and category_id is distinct from $TRANSPORTE")" "0"
+
+PENDING_BEFORE="$(sql "select count(*) from transactions where not reviewed")"
+SUGGESTED="$(sql "select count(*) from transactions where not reviewed and category_id is not null")"
+IDS="$(sql "select string_agg('id=' || id, '&') from transactions where not reviewed and category_id is not null")"
+check "aprovar em lote" "$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$IDS" "$URL/revisar/aprovar")" "303"
+check "aprovou só os com sugestão" "$(sql "select count(*) from transactions where not reviewed")" "$((PENDING_BEFORE - SUGGESTED))"
+check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: https://malicioso.example' -o "$TMP/descarte" -w '%{http_code}' --data "id=1" "$URL/revisar/aprovar")" "403"
+
+dc restart app >/dev/null 2>&1
+wait_healthy
+check "reinício não muda categorias revisadas" "$(sql "select count(*) from transactions where description = 'POSTO EXEMPLO' and category_id = $TRANSPORTE")" "$(echo "$POSTO_IDS" | tr ',' '\n' | wc -l | tr -d ' ')"
 
 echo
 echo "Todos os $PASS testes de importação passaram."

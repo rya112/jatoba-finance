@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { ImportError, MAX_IMPORT_BYTES, type ImportOutcome, type TransactionRow } from "@jatoba/core";
-import { homePage, importPage, loginPage, transactionsPage } from "./pages.js";
+import { CategoryError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type ReviewRow, type TransactionRow } from "@jatoba/core";
+import { homePage, importPage, loginPage, reviewPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 
@@ -23,6 +23,12 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number }) => Promise<TransactionRow[]>;
     count: () => Promise<number>;
+  };
+  review: {
+    categories: () => Promise<Category[]>;
+    list: (opts?: { limit?: number }) => Promise<{ rows: ReviewRow[]; total: number; withSuggestion: number }>;
+    setCategory: (id: string, categoryId: number, opts?: { rulePattern?: string }) => Promise<{ otherChanged: number; ruleCreated: boolean }>;
+    approve: (ids: string[]) => Promise<number>;
   };
 }
 
@@ -116,7 +122,10 @@ export function createApp(deps: AppDeps): Hono {
     await next();
   });
 
-  app.get("/", async (c) => c.html(homePage(deps.version, await deps.ledger.count())));
+  app.get("/", async (c) => {
+    const [count, review] = await Promise.all([deps.ledger.count(), deps.review.list({ limit: 1 })]);
+    return c.html(homePage(deps.version, count, review.total));
+  });
 
   app.get("/importar", (c) => c.html(importPage()));
 
@@ -147,6 +156,48 @@ export function createApp(deps: AppDeps): Hono {
   app.get("/lancamentos", async (c) => {
     const [rows, total] = await Promise.all([deps.ledger.list({ limit: 500 }), deps.ledger.count()]);
     return c.html(transactionsPage(rows, total));
+  });
+
+  const showReview = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
+    const [list, categories] = await Promise.all([deps.review.list({ limit: 50 }), deps.review.categories()]);
+    return c.html(reviewPage({ ...list, categories, ...flash }), status);
+  };
+
+  app.get("/revisar", (c) => {
+    const salvo = c.req.query("salvo");
+    const outros = Number(c.req.query("outros") ?? 0);
+    const aprovados = c.req.query("aprovados");
+    let message: string | undefined;
+    if (aprovados !== undefined) message = `${Number(aprovados) || 0} sugestão(ões) aprovada(s).`;
+    else if (salvo === "regra") message = `Categoria salva e regra criada${outros > 0 ? `; ${outros} outro(s) lançamento(s) ganharam sugestão` : ""}.`;
+    else if (salvo !== undefined) message = "Categoria salva.";
+    return showReview(c, { message });
+  });
+
+  app.post("/revisar/aprovar", bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+    const form = await c.req.parseBody({ all: true });
+    const raw = form.id;
+    const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+    const ids = values.filter((v): v is string => typeof v === "string" && /^\d+$/.test(v));
+    const approved = await deps.review.approve(ids);
+    return c.redirect(`/revisar?aprovados=${approved}`, 303);
+  });
+
+  app.post("/revisar/:id", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
+    const id = c.req.param("id");
+    if (!/^\d+$/.test(id)) return c.text("Lançamento inválido.", 404);
+    const form = await c.req.parseBody();
+    const categoryId = Number(form.categoria);
+    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return showReview(c, { error: "Escolha uma categoria." }, 400);
+    const wantsRule = form.criar_regra === "1";
+    const pattern = typeof form.regra === "string" ? form.regra : "";
+    try {
+      const result = await deps.review.setCategory(id, categoryId, wantsRule ? { rulePattern: pattern } : {});
+      return c.redirect(`/revisar?salvo=${result.ruleCreated ? "regra" : "1"}&outros=${result.otherChanged}`, 303);
+    } catch (error) {
+      if (error instanceof CategoryError) return showReview(c, { error: error.message }, 400);
+      throw error;
+    }
   });
 
   return app;

@@ -84,4 +84,82 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   contentFingerprint,
+  {
+    id: "0004_categories",
+    sql: `
+      create table categories (
+        id        serial primary key,
+        name      text not null unique,
+        kind      text not null check (kind in ('despesa', 'receita', 'movimentacao')),
+        position  integer not null
+      );
+
+      insert into categories (name, kind, position) values
+        ('Moradia', 'despesa', 10),
+        ('Contas da casa', 'despesa', 20),
+        ('Mercado', 'despesa', 30),
+        ('Restaurantes e delivery', 'despesa', 40),
+        ('Transporte', 'despesa', 50),
+        ('Saúde', 'despesa', 60),
+        ('Educação', 'despesa', 70),
+        ('Lazer', 'despesa', 80),
+        ('Assinaturas', 'despesa', 90),
+        ('Compras', 'despesa', 100),
+        ('Vestuário', 'despesa', 110),
+        ('Cuidados pessoais', 'despesa', 120),
+        ('Pets', 'despesa', 130),
+        ('Viagens', 'despesa', 140),
+        ('Impostos e taxas', 'despesa', 150),
+        ('Presentes e doações', 'despesa', 160),
+        ('Outros', 'despesa', 170),
+        ('Salário', 'receita', 210),
+        ('Rendimentos', 'receita', 220),
+        ('Reembolsos', 'receita', 230),
+        ('Outras receitas', 'receita', 240),
+        ('Transferência entre contas', 'movimentacao', 310),
+        ('Pagamento de fatura', 'movimentacao', 320),
+        ('Aporte em investimento', 'movimentacao', 330),
+        ('Resgate de investimento', 'movimentacao', 340);
+
+      -- Regras: "se a descrição contém <pattern>, use <category>". O padrão é guardado
+      -- normalizado (maiúsculo, sem acento). Direção e tipo de conta são filtros opcionais.
+      create table rules (
+        id            serial primary key,
+        pattern       text not null,
+        direction     text check (direction in ('saida', 'entrada')),
+        account_kind  text check (account_kind in ('conta', 'cartao')),
+        category_id   integer not null references categories (id) on delete cascade,
+        origin        text not null check (origin in ('sistema', 'usuario')),
+        created_at    timestamptz not null default now(),
+        unique nulls not distinct (pattern, direction, account_kind)
+      );
+
+      insert into rules (pattern, direction, account_kind, category_id, origin)
+      select r.pattern, r.direction, r.account_kind, c.id, 'sistema'
+      from (values
+        ('FATURA', 'saida', 'conta', 'Pagamento de fatura'),
+        ('PAGAMENTO', 'entrada', 'cartao', 'Pagamento de fatura'),
+        ('CDB', 'saida', null, 'Aporte em investimento'),
+        ('APLICACAO', 'saida', null, 'Aporte em investimento'),
+        ('INVESTIMENTO', 'saida', null, 'Aporte em investimento'),
+        ('CDB', 'entrada', null, 'Resgate de investimento'),
+        ('RESGATE', 'entrada', null, 'Resgate de investimento'),
+        ('SALARIO', 'entrada', null, 'Salário'),
+        ('RENDIMENTO', 'entrada', null, 'Rendimentos'),
+        ('IOF', 'saida', null, 'Impostos e taxas'),
+        ('ANUIDADE', 'saida', null, 'Impostos e taxas'),
+        ('TARIFA', 'saida', null, 'Impostos e taxas')
+      ) as r(pattern, direction, account_kind, category)
+      join categories c on c.name = r.category;
+
+      alter table transactions
+        add column clean_description  text,
+        add column category_id        integer references categories (id) on delete set null,
+        add column category_source    text check (category_source in ('manual', 'regra', 'banco')),
+        add column rule_id            integer references rules (id) on delete set null,
+        add column reviewed           boolean not null default false;
+      create index transactions_category_idx on transactions (category_id);
+      create index transactions_pending_review_idx on transactions (date) where not reviewed;
+    `,
+  },
 ];

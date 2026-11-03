@@ -32,7 +32,7 @@ describe("fatura do C6 (CSV)", () => {
   });
 
   it("lê data, parcela, cartão, categoria e decimal com ponto, como o C6 real", () => {
-    expect(byDescription("LOJA EXEMPLO")).toMatchObject({ date: "2026-07-08", installment: { current: 3, total: 10 }, cardLast4: "1111", bankCategory: "Departamento" });
+    expect(byDescription("LOJA EXEMPLO")).toMatchObject({ date: "2026-07-08", installment: { current: 3, total: 10 }, cardLast4: "1111", bankCategory: "Departamento / Desconto" });
     expect(byDescription("MERCADO EXEMPLO")!.installment).toBeUndefined();
     expect(byDescription("RESTAURANTE EXEMPLO")!.cardLast4).toBe("2222");
     expect(byDescription("HOTEL EXEMPLO; CENTRO")!.amount).toBe(-145000);

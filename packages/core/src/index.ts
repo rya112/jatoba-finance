@@ -31,3 +31,23 @@ export {
   type ImportSummary,
   type TransactionRow,
 } from "./import/importer.js";
+export {
+  normalizeText,
+  cleanDescription,
+  suggestCategory,
+  sortRules,
+  ruleMatches,
+  categorize,
+  listCategories,
+  listRules,
+  listForReview,
+  setCategory,
+  approveSuggestions,
+  CategoryError,
+  BANK_CATEGORY_MAP,
+  type Category,
+  type CategoryKind,
+  type Rule,
+  type ReviewRow,
+  type Suggestion,
+} from "./categories.js";

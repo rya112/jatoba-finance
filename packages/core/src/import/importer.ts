@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Sql } from "../db.js";
+import { categorize } from "../categories.js";
 import { decodeText, detectLayout, parseCsvStatement, CsvError } from "./csv.js";
 import { parseOfx } from "./ofx.js";
 import type { ImportResult, Statement, Transaction } from "./types.js";
@@ -108,6 +109,7 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
       select created_at from imports where file_sha256 = ${fileSha} order by created_at limit 1
     `;
     const summaries: ImportSummary[] = [];
+    const insertedIds: string[] = [];
 
     for (const statement of statements) {
       const { keyHash, last4, name } = accountKey(source, statement);
@@ -147,12 +149,13 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
       let inserted = 0;
       for (let i = 0; i < rows.length; i += 500) {
         const chunk = rows.slice(i, i + 500);
-        const result = await tx`
+        const result = await tx<{ id: string }[]>`
           insert into transactions ${tx(chunk)}
           on conflict (account_id, fingerprint) do nothing
           returning id
         `;
         inserted += result.length;
+        insertedIds.push(...result.map((r) => r.id));
       }
       const duplicates = rows.length - inserted;
       await tx`update imports set inserted = ${inserted}, duplicates = ${duplicates} where id = ${imp!.id}`;
@@ -170,6 +173,8 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
       });
     }
 
+    // Descrição limpa e sugestão de categoria para o que acabou de entrar.
+    if (insertedIds.length > 0) await categorize(tx as unknown as Sql, { onlyIds: insertedIds });
     return { fileName, previouslyImportedAt: previous?.created_at, statements: summaries, warnings };
   });
 }
@@ -180,6 +185,9 @@ export interface TransactionRow {
   amount: number;
   currency: string;
   description: string;
+  cleanDescription?: string;
+  categoryName?: string;
+  reviewed?: boolean;
   accountName: string;
   installment?: string;
   cardLast4?: string;
@@ -197,11 +205,15 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
       installment_current: number | null;
       installment_total: number | null;
       card_last4: string | null;
+      clean_description: string | null;
+      category_name: string | null;
+      reviewed: boolean;
     }[]
   >`
     select t.id, to_char(t.date, 'YYYY-MM-DD') as date, t.amount, a.currency, t.description, a.name as account_name,
-           t.installment_current, t.installment_total, t.card_last4
+           t.installment_current, t.installment_total, t.card_last4, t.clean_description, c.name as category_name, t.reviewed
     from transactions t join accounts a on a.id = t.account_id
+    left join categories c on c.id = t.category_id
     order by t.date desc, t.id desc
     limit ${limit} offset ${offset}
   `;
@@ -214,6 +226,9 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
     accountName: r.account_name,
     installment: r.installment_current ? `${r.installment_current}/${r.installment_total}` : undefined,
     cardLast4: r.card_last4 ?? undefined,
+    cleanDescription: r.clean_description ?? undefined,
+    categoryName: r.category_name ?? undefined,
+    reviewed: r.reviewed,
   }));
 }
 

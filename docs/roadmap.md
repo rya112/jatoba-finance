@@ -26,6 +26,7 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Fase 1: imagem multi-arquitetura (amd64 e arm64)
 - [x] Fase 2: leitor de OFX (1.x e 2.x, conta e cartão)
 - [x] Fase 2: leitor de CSV e fatura do C6
-- [ ] Fase 2: CSV da Wise e perfis de banco (C6, Banco do Brasil, Wise)
 - [x] Fase 2: importação pela página, sem duplicados, e lista de lançamentos
-- [ ] Fase 2: limpeza das descrições, regras de categoria e tela de revisão
+- [x] Fase 2: limpeza das descrições, regras de categoria e tela de revisão
+- [ ] Fase 2: CSV da Wise e perfil do Banco do Brasil (em espera)
+- [ ] Fase 2: três meses importados sem duplicados e sem gasto contado duas vezes (critério de pronto)
