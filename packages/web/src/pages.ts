@@ -1,10 +1,10 @@
-import { formatMoney, normalizeText, type Category, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type AccountInfo, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-type Section = "inicio" | "mes" | "importar" | "revisar" | "lancamentos";
+type Section = "inicio" | "mes" | "importar" | "revisar" | "lancamentos" | "ajustes";
 
 const NAV: { id: Section; href: string; label: string }[] = [
   { id: "inicio", href: "/", label: "Início" },
@@ -12,6 +12,7 @@ const NAV: { id: Section; href: string; label: string }[] = [
   { id: "importar", href: "/importar", label: "Importar" },
   { id: "revisar", href: "/revisar", label: "Revisar" },
   { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
+  { id: "ajustes", href: "/ajustes", label: "Ajustes" },
 ];
 
 function layout(title: string, body: string, opts: { section?: Section; wide?: boolean } = {}): string {
@@ -112,6 +113,13 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .pior { color: var(--erro); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .filtro { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  h3 { font-size: 1rem; margin: 1.25rem 0 0.25rem; color: var(--suave); font-weight: 600; }
+  .lista-ajustes { list-style: none; padding: 0; margin: 0.5rem 0 0; border-top: 1px solid var(--linha); }
+  .lista-ajustes > li { border-bottom: 1px solid var(--linha); padding: 0.5rem 0; }
+  .lista-ajustes summary { cursor: pointer; overflow-wrap: anywhere; }
+  .linha-form { display: flex; gap: 0.5rem 0.75rem; flex-wrap: wrap; align-items: end; margin: 0.6rem 0; }
+  .linha-form label { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .linha-form select, .linha-form input[type=text] { font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--linha); border-radius: 0.5rem; padding: 0.4rem 0.6rem; max-width: 100%; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -520,5 +528,117 @@ export function monthPage(summary: MonthSummary | undefined, months: string[]): 
   ${movements}
   <p class="suave rodape">Compras do cartão entram no mês de vencimento da fatura; lançamentos da conta, no mês da data. Estornos descontam da categoria da compra. ${previous}</p>`,
     { section: "mes", wide: true },
+  );
+}
+
+const DIRECTION_LABEL: Record<string, string> = { "": "saídas e entradas", saida: "só saídas", entrada: "só entradas" };
+const ACCOUNT_LABEL: Record<string, string> = { "": "conta e cartão", conta: "só conta", cartao: "só cartão" };
+
+function options(map: Record<string, string>, selected: string): string {
+  return Object.entries(map)
+    .map(([value, label]) => `<option value="${value}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`)
+    .join("");
+}
+
+function kindSelect(selected: string): string {
+  return `<select name="tipo" aria-label="Tipo">${options({ despesa: "Despesa", receita: "Receita", movimentacao: "Movimentação (não conta como gasto)" }, selected)}</select>`;
+}
+
+function ruleForm(action: string, categories: Category[], r?: RuleDetail): string {
+  return `<form class="linha-form" method="post" action="${action}">
+      <label>Se a descrição contém <input type="text" name="texto" value="${escapeHtml(r?.pattern ?? "")}" required minlength="3" maxlength="80"></label>
+      <label>em <select name="direcao">${options(DIRECTION_LABEL, r?.direction ?? "")}</select></label>
+      <label>de <select name="conta">${options(ACCOUNT_LABEL, r?.accountKind ?? "")}</select></label>
+      <label>usar ${categorySelect(categories, r?.categoryId ?? null)}</label>
+      <button type="submit">${r ? "Salvar regra" : "Criar regra"}</button>
+    </form>`;
+}
+
+export function settingsPage(opts: {
+  categories: CategoryUsage[];
+  rules: RuleDetail[];
+  accounts: AccountInfo[];
+  message?: string;
+  error?: string;
+}): string {
+  const plain: Category[] = opts.categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind }));
+  const flash = [
+    opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
+    opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : "",
+  ].join("");
+
+  const categoryGroups = (["despesa", "receita", "movimentacao"] as const)
+    .map((kind) => {
+      const items = opts.categories
+        .filter((c) => c.kind === kind)
+        .map((c) => {
+          const others = plain.filter((o) => o.id !== c.id);
+          return `<li><details>
+        <summary><strong>${escapeHtml(c.name)}</strong> <span class="suave">· ${c.transactions} lançamento(s) · ${c.rules} regra(s)</span></summary>
+        <form class="linha-form" method="post" action="/ajustes/categorias/${c.id}">
+          <label>Nome <input type="text" name="nome" value="${escapeHtml(c.name)}" required minlength="2" maxlength="40"></label>
+          ${kindSelect(c.kind)}
+          <button type="submit">Salvar</button>
+        </form>
+        <form class="linha-form" method="post" action="/ajustes/categorias/${c.id}/apagar">
+          <label>Apagar e mover lançamentos e regras para
+            <select name="mover_para"><option value="">(nenhuma: voltam para Revisar)</option>${others
+              .map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`)
+              .join("")}</select></label>
+          <label class="regra"><input type="checkbox" name="confirmar" value="1" required> Confirmo apagar “${escapeHtml(c.name)}”</label>
+          <button class="discreto" type="submit">Apagar</button>
+        </form>
+      </details></li>`;
+        })
+        .join("");
+      return `<h3>${KIND_LABEL[kind]}</h3><ul class="lista-ajustes">${items}</ul>`;
+    })
+    .join("");
+
+  const ruleItems = opts.rules
+    .map(
+      (r) => `<li><details>
+      <summary><strong>“${escapeHtml(r.pattern)}”</strong> → ${escapeHtml(r.categoryName)}
+        <span class="suave">· ${DIRECTION_LABEL[r.direction ?? ""]} · ${ACCOUNT_LABEL[r.accountKind ?? ""]} · ${r.matches} lançamento(s)</span>
+        ${r.origin === "sistema" ? '<span class="etiqueta">do sistema</span>' : ""}</summary>
+      ${ruleForm(`/ajustes/regras/${r.id}`, plain, r)}
+      <form class="linha-form" method="post" action="/ajustes/regras/${r.id}/apagar"><button class="discreto" type="submit">Apagar regra</button></form>
+    </details></li>`,
+    )
+    .join("");
+
+  const accountItems = opts.accounts
+    .map(
+      (a) => `<li><details>
+      <summary><strong>${escapeHtml(a.name)}</strong> <span class="suave">· ${a.kind === "conta" ? "conta" : "cartão"} · ${escapeHtml(a.currency)}${a.last4 ? ` · final ${escapeHtml(a.last4)}` : ""} · ${a.transactions} lançamento(s)</span></summary>
+      <form class="linha-form" method="post" action="/ajustes/contas/${a.id}">
+        <label>Nome <input type="text" name="nome" value="${escapeHtml(a.name)}" required minlength="2" maxlength="40"></label>
+        <button type="submit">Salvar</button>
+      </form>
+    </details></li>`,
+    )
+    .join("");
+
+  return layout(
+    "Ajustes · Jatobá Finance",
+    `  <h1>Ajustes</h1>${flash}
+  <p class="suave">Mudanças em categorias e regras refazem as sugestões na hora. O que você escolheu à mão ou já revisou nunca muda.</p>
+
+  <h2>Categorias</h2>
+  <form class="linha-form" method="post" action="/ajustes/categorias">
+    <label>Nova categoria <input type="text" name="nome" required minlength="2" maxlength="40"></label>
+    ${kindSelect("despesa")}
+    <button type="submit">Criar</button>
+  </form>
+  ${categoryGroups}
+
+  <h2>Regras</h2>
+  <p class="suave">“Se a descrição contém…”: o texto é comparado sem acentos e sem diferença de maiúsculas. As suas regras vêm antes das do sistema; entre elas, a de texto mais longo vence.</p>
+  ${ruleForm("/ajustes/regras", plain)}
+  <ul class="lista-ajustes">${ruleItems}</ul>
+
+  <h2>Contas</h2>
+  <ul class="lista-ajustes">${accountItems || '<li class="suave">Nenhuma conta ainda. Elas aparecem ao importar extratos.</li>'}</ul>`,
+    { section: "ajustes", wide: true },
   );
 }

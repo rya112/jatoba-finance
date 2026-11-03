@@ -96,6 +96,24 @@ check "aprovar em lote" "$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte
 check "aprovou só os com sugestão" "$(sql "select count(*) from transactions where not reviewed")" "$((PENDING_BEFORE - SUGGESTED))"
 check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: https://malicioso.example' -o "$TMP/descarte" -w '%{http_code}' --data "id=1" "$URL/revisar/aprovar")" "403"
 
+echo "== Ajustes"
+form() { curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$2" "$URL$1"; }
+curl -s -b "$JAR" "$URL/ajustes" | grep -q "<h1>Ajustes</h1>" && ok "página Ajustes abre" || fail "Ajustes não abriu"
+CASA="$(sql "select id from categories where name = 'Contas da casa'")"
+check "criar regra pela página" "$(form /ajustes/regras "texto=energia+exemplo&direcao=saida&conta=conta&categoria=$CASA")" "303"
+check "regra aplicada ao lançamento" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'DEB AUTOMATICO ENERGIA EXEMPLO'")" "Contas da casa"
+MERCADO="$(sql "select id from categories where name = 'Mercado'")"
+check "renomear categoria" "$(form "/ajustes/categorias/$MERCADO" "nome=Supermercado&tipo=despesa")" "303"
+dc restart app >/dev/null 2>&1
+wait_healthy
+check "sugestão do C6 continua após renomear e reiniciar" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.description = 'MERCADO EXEMPLO'")" "Supermercado"
+CONTA="$(sql "select id from accounts where kind = 'conta' order by id limit 1")"
+check "renomear conta" "$(form "/ajustes/contas/$CONTA" "nome=Conta+de+teste")" "303"
+check "conta renomeada" "$(sql "select name from accounts where id = $CONTA")" "Conta de teste"
+OUTROS="$(sql "select id from categories where name = 'Outros'")"
+check "apagar sem confirmação é recusado" "$(form "/ajustes/categorias/$OUTROS/apagar" "mover_para=")" "400"
+check "categoria continua lá" "$(sql "select count(*) from categories where id = $OUTROS")" "1"
+
 echo "== Mês"
 curl -s -b "$JAR" "$URL/mes" > "$TMP/mes.html"
 grep -q "Para onde foi o dinheiro" "$TMP/mes.html" && ok "página do Mês abre" || fail "Mês não abriu"

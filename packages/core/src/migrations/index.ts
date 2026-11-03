@@ -206,4 +206,13 @@ export const MIGRATIONS: readonly Migration[] = [
       alter table transactions add column refund_of bigint references transactions (id) on delete set null;
     `,
   },
+  {
+    id: "0007_category_aliases",
+    sql: `
+      -- Nomes pelos quais a categoria também é reconhecida (por exemplo, no mapa das categorias do C6).
+      -- Renomear mantém o nome antigo aqui; apagar movendo para outra passa os nomes para a de destino.
+      alter table categories add column aliases text[] not null default '{}';
+      update categories set aliases = array[name];
+    `,
+  },
 ];

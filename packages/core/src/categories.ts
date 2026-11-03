@@ -177,8 +177,14 @@ export async function listRules(sql: Sql): Promise<Rule[]> {
  * Devolve quantos lançamentos ganharam ou mudaram de sugestão.
  */
 export async function categorize(sql: Sql, opts: { onlyIds?: string[]; refundPass?: boolean } = {}): Promise<number> {
-  const [categories, rules] = await Promise.all([listCategories(sql), listRules(sql)]);
-  const byName = new Map(categories.map((c) => [c.name, c.id]));
+  const [names, rules] = await Promise.all([
+    sql<{ id: number; name: string; aliases: string[] }[]>`select id, name, aliases from categories`,
+    listRules(sql),
+  ]);
+  // Nome atual e nomes antigos (aliases) apontam para a categoria.
+  const byName = new Map<string, number>();
+  for (const c of names) for (const n of c.aliases) byName.set(n, c.id);
+  for (const c of names) byName.set(c.name, c.id);
   const sorted = sortRules(rules);
 
   const rows = await sql<

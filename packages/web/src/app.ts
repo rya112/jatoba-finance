@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type MonthSummary, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
-import { homePage, importPage, loginPage, monthPage, reviewPage, transactionsPage } from "./pages.js";
+import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { homePage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 export const PAGE_SIZE = 50;
@@ -24,6 +24,18 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  settings: {
+    categories: () => Promise<CategoryUsage[]>;
+    rules: () => Promise<RuleDetail[]>;
+    accounts: () => Promise<AccountInfo[]>;
+    createCategory: (input: { name: string; kind: string }) => Promise<number>;
+    updateCategory: (id: number, input: { name: string; kind: string }) => Promise<void>;
+    deleteCategory: (id: number, opts: { moveTo?: number }) => Promise<number>;
+    createRule: (input: RuleInput) => Promise<number>;
+    updateRule: (id: number, input: RuleInput) => Promise<number>;
+    deleteRule: (id: number) => Promise<number>;
+    renameAccount: (id: number, name: string) => Promise<void>;
   };
   month: {
     months: () => Promise<string[]>;
@@ -249,6 +261,87 @@ export function createApp(deps: AppDeps): Hono {
     }
     return c.redirect(`/revisar?duplicado=${decision === "duplicado" ? "descartado" : "mantido"}`, 303);
   });
+
+  // ---------- Ajustes ----------
+  const SETTINGS_MESSAGES: Record<string, string> = {
+    "categoria-criada": "Categoria criada.",
+    "categoria-salva": "Categoria salva.",
+    "categoria-apagada": "Categoria apagada.",
+    "regra-criada": "Regra criada.",
+    "regra-salva": "Regra salva.",
+    "regra-apagada": "Regra apagada.",
+    "conta-salva": "Conta renomeada.",
+  };
+
+  const showSettings = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
+    const [categories, rules, accounts] = await Promise.all([deps.settings.categories(), deps.settings.rules(), deps.settings.accounts()]);
+    return c.html(settingsPage({ categories, rules, accounts, ...flash }), status);
+  };
+
+  app.get("/ajustes", (c) => {
+    const key = c.req.query("ok") ?? "";
+    const n = Number(c.req.query("n") ?? 0);
+    const base = SETTINGS_MESSAGES[key];
+    const message = base ? `${base}${n > 0 ? ` ${n} lançamento(s) mudaram de sugestão ou de categoria.` : ""}` : undefined;
+    return showSettings(c, { message });
+  });
+
+  /** Executa uma ação dos Ajustes; erros de validação voltam para a página com a mensagem. */
+  const settingsAction = (handler: (c: Context, form: Record<string, string | File>) => Promise<string>) =>
+    async (c: Context) => {
+      const form = await c.req.parseBody();
+      try {
+        return c.redirect(await handler(c, form), 303);
+      } catch (error) {
+        if (error instanceof CategoryError) return showSettings(c, { error: error.message }, 400);
+        throw error;
+      }
+    };
+  const idParam = (c: Context): number => {
+    const raw = c.req.param("id") ?? "";
+    if (!/^\d{1,9}$/.test(raw)) throw new CategoryError("Item inválido.");
+    return Number(raw);
+  };
+  const text = (form: Record<string, string | File>, key: string) => (typeof form[key] === "string" ? (form[key] as string) : "");
+  const ruleInput = (form: Record<string, string | File>) => ({
+    pattern: text(form, "texto"),
+    direction: text(form, "direcao"),
+    accountKind: text(form, "conta"),
+    categoryId: Number(text(form, "categoria")) || 0,
+  });
+  const limit = bodyLimit({ maxSize: 8 * 1024 });
+
+  app.post("/ajustes/categorias", limit, settingsAction(async (_c, form) => {
+    await deps.settings.createCategory({ name: text(form, "nome"), kind: text(form, "tipo") });
+    return "/ajustes?ok=categoria-criada";
+  }));
+  app.post("/ajustes/categorias/:id", limit, settingsAction(async (c, form) => {
+    await deps.settings.updateCategory(idParam(c), { name: text(form, "nome"), kind: text(form, "tipo") });
+    return "/ajustes?ok=categoria-salva";
+  }));
+  app.post("/ajustes/categorias/:id/apagar", limit, settingsAction(async (c, form) => {
+    if (text(form, "confirmar") !== "1") throw new CategoryError("Marque a confirmação para apagar a categoria.");
+    const target = text(form, "mover_para");
+    const moveTo = /^\d{1,9}$/.test(target) ? Number(target) : undefined;
+    const n = await deps.settings.deleteCategory(idParam(c), moveTo === undefined ? {} : { moveTo });
+    return `/ajustes?ok=categoria-apagada&n=${n}`;
+  }));
+  app.post("/ajustes/regras", limit, settingsAction(async (_c, form) => {
+    const n = await deps.settings.createRule(ruleInput(form));
+    return `/ajustes?ok=regra-criada&n=${n}`;
+  }));
+  app.post("/ajustes/regras/:id", limit, settingsAction(async (c, form) => {
+    const n = await deps.settings.updateRule(idParam(c), ruleInput(form));
+    return `/ajustes?ok=regra-salva&n=${n}`;
+  }));
+  app.post("/ajustes/regras/:id/apagar", limit, settingsAction(async (c) => {
+    const n = await deps.settings.deleteRule(idParam(c));
+    return `/ajustes?ok=regra-apagada&n=${n}`;
+  }));
+  app.post("/ajustes/contas/:id", limit, settingsAction(async (c, form) => {
+    await deps.settings.renameAccount(idParam(c), text(form, "nome"));
+    return "/ajustes?ok=conta-salva";
+  }));
 
   return app;
 }

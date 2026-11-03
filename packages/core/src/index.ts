@@ -56,3 +56,19 @@ export {
 } from "./categories.js";
 export { flagSuspects, listSuspects, resolveSuspect, countSuspects, DuplicateError, type SuspectPair } from "./duplicates.js";
 export { monthSummary, listMonths, addMonths, parseMonth, type MonthSummary, type CategoryTotal } from "./month.js";
+export {
+  listCategoryUsage,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  listRuleDetails,
+  createRule,
+  updateRule,
+  deleteRule,
+  listAccounts,
+  renameAccount,
+  type CategoryUsage,
+  type RuleDetail,
+  type RuleInput,
+  type AccountInfo,
+} from "./settings.js";

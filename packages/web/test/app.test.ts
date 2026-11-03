@@ -133,6 +133,11 @@ async function makeApp(publicUrl?: string) {
       },
     },
     review,
+    settings: {
+      categories: async () => [], rules: async () => [], accounts: async () => [],
+      createCategory: async () => 1, updateCategory: async () => {}, deleteCategory: async () => 0,
+      createRule: async () => 0, updateRule: async () => 0, deleteRule: async () => 0, renameAccount: async () => {},
+    },
     month: {
       months: async () => months,
       summary: async (m: string) => {
