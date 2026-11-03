@@ -12,7 +12,7 @@ Informações confirmadas com arquivos reais pelo comando `jatoba check`, que n�
 
 ### C6 Bank
 
-- **Conta corrente:** OFX, lido sem avisos. O período declarado no arquivo (`DTSTART`/`DTEND`) é a data da exportação, não o mês do extrato; o Jatobá usa as datas dos lançamentos. O arquivo não traz saldo.
+- **Conta corrente:** OFX, lido sem avisos. **Os FITIDs mudam a cada exportação** (são gerados de novo para os mesmos lançamentos), por isso o Jatobá reconhece duplicados pelo conteúdo, não pelo FITID. O período declarado no arquivo (`DTSTART`/`DTEND`) é a data da exportação, não o mês do extrato; o Jatobá usa as datas dos lançamentos. O arquivo não traz saldo.
 - **Fatura do cartão:** só CSV, XLSX ou PDF. O Jatobá lê o CSV: separador `;`, colunas `Data de Compra;Nome no Cartão;Final do Cartão;Categoria;Descrição;Parcela;Valor (em US$);Cotação (em R$);Valor (em R$)`.
 
 ### Banco do Brasil

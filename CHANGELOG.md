@@ -24,6 +24,10 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Página **Lançamentos** com tudo o que foi importado, e menu de navegação.
 - Imagem Docker para amd64 e arm64 (Mac com chip Apple, Raspberry Pi 4 ou mais novo).
 
+### Correções
+
+- Duplicados em importações com períodos sobrepostos no C6, que gera FITIDs novos a cada exportação. Agora os duplicados são reconhecidos pelo conteúdo (data, valor, descrição e ocorrência), e a migração 0003 remove as cópias que já tinham entrado, mantendo sempre a primeira.
+
 ### Segurança
 
 - Node.js 26 (LTS) na imagem Docker, no CI e como versão mínima (`engines`).

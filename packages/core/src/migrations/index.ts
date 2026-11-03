@@ -1,11 +1,16 @@
+import type postgres from "postgres";
+import { contentFingerprint } from "./0003_content_fingerprint.js";
+
 /**
  * Migrações do banco, em ordem. Regras:
  * - Nunca altere uma migração que já foi publicada; crie uma nova.
  * - O id começa com 4 dígitos sequenciais e diz o que a migração faz.
+ * - `sql` roda primeiro; `run` é para o que precisa de código (sempre na mesma transação).
  */
 export interface Migration {
   id: string;
-  sql: string;
+  sql?: string;
+  run?: (tx: postgres.TransactionSql) => Promise<void>;
 }
 
 export const MIGRATIONS: readonly Migration[] = [
@@ -78,4 +83,5 @@ export const MIGRATIONS: readonly Migration[] = [
       create index transactions_date_idx on transactions (date);
     `,
   },
+  contentFingerprint,
 ];

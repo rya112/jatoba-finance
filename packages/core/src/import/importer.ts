@@ -44,16 +44,16 @@ function normalizeDescription(value: string): string {
 }
 
 /**
- * Impressão digital de cada lançamento.
- * - Com FITID: o identificador do banco.
- * - Sem FITID (CSV): data, valor, descrição, cartão e parcela, mais o número da ocorrência
- *   no arquivo. Assim, dois cafés iguais no mesmo dia continuam sendo dois, e o mesmo período
- *   exportado de novo gera as mesmas impressões e não duplica nada.
+ * Impressão digital de cada lançamento: data, valor, descrição, cartão e parcela, mais o
+ * número da ocorrência no arquivo. Assim, dois cafés iguais no mesmo dia continuam sendo dois,
+ * e o mesmo período exportado de novo gera as mesmas impressões e não duplica nada.
+ *
+ * O FITID do OFX NÃO entra: o C6 gera FITIDs novos a cada exportação (ver migração 0003).
+ * Ele continua guardado em external_id, só como referência.
  */
 export function fingerprints(transactions: readonly Transaction[]): string[] {
   const seen = new Map<string, number>();
   return transactions.map((t) => {
-    if (t.externalId) return `fitid:${t.externalId}`;
     const base = [
       t.date,
       t.amount,

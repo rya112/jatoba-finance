@@ -63,7 +63,8 @@ export async function migrate(sql: Sql, migrations: readonly Migration[] = MIGRA
     for (const migration of migrations) {
       if (applied.has(migration.id)) continue;
       try {
-        await tx.unsafe(migration.sql);
+        if (migration.sql) await tx.unsafe(migration.sql);
+        if (migration.run) await migration.run(tx);
       } catch (error) {
         throw new MigrationError(`A migração ${migration.id} falhou; nada foi alterado no banco.`, { cause: error });
       }

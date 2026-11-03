@@ -8,8 +8,9 @@ import { freshDatabase, TEST_DATABASE_URL } from "./helpers/database.js";
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
 
 describe("fingerprints", () => {
-  it("usa o FITID quando existe", () => {
-    expect(fingerprints([{ externalId: "ABC", date: "2026-10-01", amount: -100, type: "DEBIT", description: "X" }])).toEqual(["fitid:ABC"]);
+  it("ignora o FITID: o mesmo lançamento com FITIDs diferentes (como no C6) tem a mesma impressão", () => {
+    const t = { date: "2026-10-01", amount: -100, type: "DEBIT", description: "X" };
+    expect(fingerprints([{ ...t, externalId: "99M9GYC9XQ" }])).toEqual(fingerprints([{ ...t, externalId: "99M9GTE9F9" }]));
   });
 
   it("sem FITID, compras idênticas no mesmo arquivo recebem números de ocorrência diferentes", () => {
@@ -105,6 +106,14 @@ describe.skipIf(!TEST_DATABASE_URL)("importFile no Postgres", () => {
     const accounts = await sql`select * from accounts order by id`;
     expect(accounts.map((a) => a.last4)).toEqual([null, "3456"]);
     expect(JSON.stringify(accounts)).not.toContain("12345-6");
+  });
+
+  it("OFX com FITIDs novos a cada exportação (C6): a sobreposição não duplica", async () => {
+    await importFile(sql, "outubro.ofx", fixture("banco-exemplo-corrente.ofx"));
+    const reexported = fixture("banco-exemplo-corrente.ofx").toString("latin1").replace(/<FITID>CC/g, "<FITID>NOVO");
+    const result = await importFile(sql, "outubro-de-novo.ofx", Buffer.from(reexported, "latin1"));
+    expect(result.previouslyImportedAt).toBeUndefined();
+    expect(result.statements[0]).toMatchObject({ inserted: 0, duplicates: 7 });
   });
 
   it("conta e cartão no mesmo OFX viram duas contas", async () => {
