@@ -19,6 +19,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - `/health` também verifica o banco de dados.
 - Backups criptografados com `age`: `jatoba backup`, `jatoba list`, `jatoba restore` e `jatoba keygen`. Há backup automático antes de migrações e de restaurações. Veja `docs/backup.md`.
 - Leitor de OFX 1.x e 2.x (conta e cartão, Windows-1252 e UTF-8). `jatoba check <arquivo>` confere um extrato mostrando só um resumo, sem descrições nem valores.
+- Leitor da fatura do cartão C6 em CSV: parcelas, vários cartões, compras em dólar com cotação. `jatoba check` também confere CSV, mostrando só os formatos encontrados.
 - Imagem Docker para amd64 e arm64 (Mac com chip Apple, Raspberry Pi 4 ou mais novo).
 
 ### Segurança

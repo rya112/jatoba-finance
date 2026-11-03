@@ -1,4 +1,5 @@
 import { toCents, type Cents } from "../money.js";
+import type { ImportResult, Statement, StatementKind, Transaction } from "./types.js";
 
 /**
  * Leitor de OFX tolerante: aceita OFX 1.x (SGML, tags de valor sem fechamento)
@@ -6,38 +7,9 @@ import { toCents, type Cents } from "../money.js";
  * Não grava nada: só transforma o arquivo em dados.
  */
 
-export type StatementKind = "conta" | "cartao";
-
-export interface OfxTransaction {
-  /** FITID do banco. Pode faltar ou se repetir em alguns bancos; a importação trata isso. */
-  externalId?: string;
-  /** Data do lançamento, AAAA-MM-DD, como o banco informou (sem converter fuso). */
-  date: string;
-  amount: Cents;
-  /** TRNTYPE do OFX: DEBIT, CREDIT, PAYMENT, XFER... */
-  type: string;
-  /** NAME e MEMO juntos, sem repetição. É o texto que a limpeza e as regras vão usar. */
-  description: string;
-  name?: string;
-  memo?: string;
-  checkNumber?: string;
-}
-
-export interface OfxStatement {
-  kind: StatementKind;
-  currency: string;
-  account: { bankId?: string; branchId?: string; accountId: string; accountType?: string };
-  start?: string;
-  end?: string;
-  ledgerBalance?: { amount: Cents; date?: string };
-  transactions: OfxTransaction[];
-}
-
-export interface OfxResult {
-  statements: OfxStatement[];
-  /** Lançamentos ignorados por estarem incompletos, com o motivo. */
-  warnings: string[];
-}
+export type OfxTransaction = Transaction;
+export type OfxStatement = Statement;
+export type OfxResult = ImportResult;
 
 export class OfxError extends Error {
   constructor(message: string) {

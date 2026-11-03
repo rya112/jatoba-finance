@@ -24,5 +24,12 @@ Tudo aqui é inventado: bancos, contas, pessoas e valores. **Nunca coloque extra
 | | `MEMO` vazio | Aluguel |
 | | Lançamento sem data (ignorado, com aviso) | FITID `S3` |
 | | Conta e cartão no mesmo arquivo | Dois extratos |
+| `c6-fatura-exemplo.csv` | Fatura do C6 em CSV: **cabeçalho real**, valores e convenções inventados | UTF-8 com BOM, separador `;` |
+| | Compras positivas no arquivo (o leitor inverte pela maioria) | Pagamento e estorno negativos |
+| | Parcela em coluna própria | `3/10` e `Única` |
+| | Vários cartões na mesma fatura (titular, adicional, virtual) | Finais 1111, 2222 e 3333 |
+| | Compra em dólar com cotação | `STREAMING EXEMPLO` |
+| | Milhar com ponto e `;` dentro de aspas | `"HOTEL EXEMPLO; CENTRO"` |
+| | Data impossível (ignorada, com aviso) | 31/02 |
 
 Para um novo caso, crie um arquivo novo com um nome que diga o que ele testa e acrescente uma linha nesta tabela.
