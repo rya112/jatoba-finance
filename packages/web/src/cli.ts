@@ -99,7 +99,20 @@ async function main(args: string[]): Promise<number> {
         console.error("Informe o arquivo: jatoba check <extrato.ofx>");
         return 2;
       }
-      const { statements, warnings } = parseOfx(await readFile(path));
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(path);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        console.error(
+          code === "ENOENT"
+            ? `Arquivo não encontrado: ${path}\nConfira o caminho. No Windows, coloque-o entre aspas, por exemplo: "C:\\Users\\voce\\Financas\\extrato.ofx"`
+            : `Não consegui ler ${path}: ${(error as Error).message}`,
+        );
+        return 1;
+      }
+      console.log(`Conferindo ${basename(path)}...`);
+      const { statements, warnings } = parseOfx(bytes);
       console.log(`Arquivo lido: ${statements.length} extrato(s). Nada foi importado nem gravado.\n`);
       for (const [i, s] of statements.entries()) {
         const ids = s.transactions.map((t) => t.externalId);
