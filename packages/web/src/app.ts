@@ -8,6 +8,7 @@ import { CategoryError, ImportError, MAX_IMPORT_BYTES, type Category, type Impor
 import { homePage, importPage, loginPage, reviewPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
+export const PAGE_SIZE = 50;
 
 export interface AppDeps {
   version: string;
@@ -21,7 +22,7 @@ export interface AppDeps {
   clientKey: (c: Context) => string;
   ledger: {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
-    list: (opts?: { limit?: number }) => Promise<TransactionRow[]>;
+    list: (opts?: { limit?: number; offset?: number }) => Promise<TransactionRow[]>;
     count: () => Promise<number>;
   };
   review: {
@@ -154,8 +155,12 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.get("/lancamentos", async (c) => {
-    const [rows, total] = await Promise.all([deps.ledger.list({ limit: 500 }), deps.ledger.count()]);
-    return c.html(transactionsPage(rows, total));
+    const total = await deps.ledger.count();
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const requested = Number.parseInt(c.req.query("pagina") ?? "1", 10);
+    const page = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), pages) : 1;
+    const rows = await deps.ledger.list({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+    return c.html(transactionsPage(rows, total, { page, pages, pageSize: PAGE_SIZE }));
   });
 
   const showReview = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {

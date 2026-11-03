@@ -90,6 +90,11 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .cartao .regra input[type=text] { padding: 0.35rem 0.5rem; font-size: 0.9rem; min-width: 10rem; flex: 1; }
   .sugestao { font-size: 0.85rem; color: var(--suave); }
   .sem-sugestao { border-left: 3px solid var(--cerne); }
+  .paginas { display: flex; gap: 0.5rem 1rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; font-size: 0.95rem; }
+  .paginas a { text-decoration: none; }
+  .paginas a:hover { text-decoration: underline; }
+  .paginas .desligado { color: var(--suave); opacity: 0.6; }
+  .paginas [aria-current] { font-weight: 600; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -183,7 +188,26 @@ export function importPage(opts: { outcome?: ImportOutcome; error?: string } = {
   );
 }
 
-export function transactionsPage(rows: TransactionRow[], total: number): string {
+/** Navegação entre páginas: primeira, anterior, "página X de Y", próxima, última. */
+function pagination(page: number, pages: number): string {
+  if (pages <= 1) return "";
+  const link = (target: number, label: string, rel?: string) =>
+    `<a href="/lancamentos?pagina=${target}"${rel ? ` rel="${rel}"` : ""}>${label}</a>`;
+  const off = (label: string) => `<span class="desligado" aria-disabled="true">${label}</span>`;
+  return `<nav class="paginas" aria-label="Páginas">
+    ${page > 1 ? link(1, "« Primeira") : off("« Primeira")}
+    ${page > 1 ? link(page - 1, "‹ Anterior", "prev") : off("‹ Anterior")}
+    <span aria-current="page">Página ${page} de ${pages}</span>
+    ${page < pages ? link(page + 1, "Próxima ›", "next") : off("Próxima ›")}
+    ${page < pages ? link(pages, "Última »") : off("Última »")}
+  </nav>`;
+}
+
+export function transactionsPage(
+  rows: TransactionRow[],
+  total: number,
+  paging: { page: number; pages: number; pageSize: number } = { page: 1, pages: 1, pageSize: rows.length },
+): string {
   if (total === 0) {
     return layout(
       "Lançamentos · Jatobá Finance",
@@ -210,11 +234,17 @@ export function transactionsPage(rows: TransactionRow[], total: number): string 
   return layout(
     "Lançamentos · Jatobá Finance",
     `  <h1>Lançamentos</h1>
-  <p class="suave">${total.toLocaleString("pt-BR")} lançamento(s)${rows.length < total ? `, mostrando os ${rows.length} mais recentes` : ""}. Entradas em verde; saídas negativas.</p>
+  <p class="suave">${total.toLocaleString("pt-BR")} lançamento(s)${
+      paging.pages > 1
+        ? `, mostrando de ${((paging.page - 1) * paging.pageSize + 1).toLocaleString("pt-BR")} a ${((paging.page - 1) * paging.pageSize + rows.length).toLocaleString("pt-BR")}`
+        : ""
+    }, do mais recente para o mais antigo. Entradas em verde; saídas negativas.</p>
+  ${pagination(paging.page, paging.pages)}
   <div class="tabela"><table>
     <thead><tr><th scope="col">Data</th><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Conta</th><th scope="col" class="valor">Valor</th></tr></thead>
     <tbody>${body}</tbody>
-  </table></div>`,
+  </table></div>
+  ${pagination(paging.page, paging.pages)}`,
     { section: "lancamentos", wide: true },
   );
 }

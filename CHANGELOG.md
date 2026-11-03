@@ -23,6 +23,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Página **Importar**: envie o OFX da conta ou o CSV da fatura do C6. Duplicados são ignorados, inclusive em períodos que se sobrepõem e em reenvios do mesmo arquivo.
 - Página **Lançamentos** com tudo o que foi importado, e menu de navegação.
 - Categorias (despesas, receitas e movimentações, que não contam como gasto) e página **Revisar**: cada lançamento chega com uma sugestão, vinda das suas regras, das regras do sistema (fatura, investimentos, salário, tarifas) ou da categoria do C6. Você confirma ou corrige; com “usar sempre”, a correção vira regra para os parecidos. Categoria escolhida à mão nunca é sobrescrita.
+- Paginação em **Lançamentos**, com 50 por página.
 - Descrições limpas para exibir, sem prefixos como “PIX ENVIADO” e “COMPRA CARTAO DEBITO”; a original continua guardada.
 - Imagem Docker para amd64 e arm64 (Mac com chip Apple, Raspberry Pi 4 ou mais novo).
 

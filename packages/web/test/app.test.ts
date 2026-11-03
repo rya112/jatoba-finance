@@ -57,8 +57,10 @@ function memoryLedger() {
         warnings,
       };
     },
-    async list() {
-      return [...rows].reverse();
+    async list(opts: { limit?: number; offset?: number } = {}) {
+      const ordered = [...rows].reverse();
+      const offset = opts.offset ?? 0;
+      return ordered.slice(offset, offset + (opts.limit ?? ordered.length));
     },
     async count() {
       return rows.length;
@@ -342,5 +344,51 @@ describe("revisar", () => {
     const { app, cookie } = await loggedIn();
     await upload(app, cookie, "extrato.ofx", OFX);
     expect(await (await app.request("/", { headers: { Cookie: cookie } })).text()).toContain("2 lançamento(s) para revisar");
+  });
+});
+
+describe("paginação de lançamentos", () => {
+  async function withRows(n: number) {
+    const { app, cookie } = await loggedIn();
+    for (let i = 1; i <= n; i++) {
+      ledger.rows.push({ id: String(i), date: "2026-10-01", amount: -i, currency: "BRL", description: `LANCAMENTO ${String(i).padStart(3, "0")}`, accountName: "Conta" });
+    }
+    const page = async (q = "") => (await app.request(`/lancamentos${q}`, { headers: { Cookie: cookie } })).text();
+    return page;
+  }
+
+  it("até 50 lançamentos: uma página, sem navegação", async () => {
+    const html = await (await withRows(50))();
+    expect(html).not.toContain('class="paginas"');
+    expect((html.match(/LANCAMENTO \d{3}/g) ?? []).length).toBe(50);
+  });
+
+  it("120 lançamentos: 3 páginas de até 50, do mais recente para o mais antigo", async () => {
+    const page = await withRows(120);
+    const first = await page();
+    expect(first).toContain("Página 1 de 3");
+    expect(first).toContain("mostrando de 1 a 50");
+    expect(first).toContain("LANCAMENTO 120");
+    expect(first).not.toContain("LANCAMENTO 070");
+    expect(first).toContain('href="/lancamentos?pagina=2" rel="next"');
+    expect(first).toContain('<span class="desligado" aria-disabled="true">‹ Anterior</span>');
+
+    const second = await page("?pagina=2");
+    expect(second).toContain("Página 2 de 3");
+    expect(second).toContain("LANCAMENTO 070");
+    expect(second).toContain('href="/lancamentos?pagina=1" rel="prev"');
+
+    const last = await page("?pagina=3");
+    expect(last).toContain("mostrando de 101 a 120");
+    expect((last.match(/LANCAMENTO \d{3}/g) ?? []).length).toBe(20);
+    expect(last).toContain('<span class="desligado" aria-disabled="true">Próxima ›</span>');
+  });
+
+  it("página fora do intervalo ou inválida vai para a mais próxima", async () => {
+    const page = await withRows(120);
+    expect(await page("?pagina=99")).toContain("Página 3 de 3");
+    expect(await page("?pagina=0")).toContain("Página 1 de 3");
+    expect(await page("?pagina=abc")).toContain("Página 1 de 3");
+    expect(await page("?pagina=-5")).toContain("Página 1 de 3");
   });
 });
