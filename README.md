@@ -30,7 +30,7 @@ Edite o `.env` e preencha `JATOBA_ADMIN_USER`, `JATOBA_ADMIN_PASSWORD` (14 carac
 docker compose up -d --build
 ```
 
-Para importar extratos, entre e use **Importar**: o OFX da conta ou o CSV da fatura do C6. Pode enviar períodos que se sobrepõem, porque o que já foi importado é ignorado. Depois, em **Revisar**, confirme as categorias sugeridas, e veja em **Mês** para onde foi o dinheiro; marque “usar sempre” para que a escolha valha para os lançamentos parecidos.
+Para importar extratos, entre e use **Importar**: o OFX da conta ou o CSV da fatura do C6. Pode enviar períodos que se sobrepõem, porque o que já foi importado é ignorado. Depois, em **Revisar**, confirme as categorias sugeridas (marque “usar sempre” para que a escolha valha para os lançamentos parecidos) e veja em **Mês** para onde foi o dinheiro.
 
 Configure também os backups criptografados: são três passos, descritos em [docs/backup.md](docs/backup.md).
 
