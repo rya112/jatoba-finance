@@ -23,4 +23,4 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Licença escolhida (AGPL-3.0)
 - [x] Fase 1: migrações do banco e login pelo `.env`
 - [x] Fase 1: backup e restauração criptografados
-- [ ] Fase 1: imagem multi-arquitetura
+- [x] Fase 1: imagem multi-arquitetura (amd64 e arm64)

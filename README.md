@@ -16,7 +16,7 @@ Finanças pessoais no seu próprio computador ou servidor. O Jatobá importa os 
 
 ## Instalação
 
-Você precisa do Docker: [Docker Desktop](https://docs.docker.com/desktop/) no Windows e no Mac, ou o Docker Engine no Linux.
+Você precisa do Docker: [Docker Desktop](https://docs.docker.com/desktop/) no Windows e no Mac, ou o Docker Engine no Linux. Roda em computadores Intel/AMD (amd64) e ARM (arm64), como Mac com chip Apple e Raspberry Pi 4 ou mais novo com sistema de 64 bits.
 
 ```bash
 mkdir jatoba && cd jatoba

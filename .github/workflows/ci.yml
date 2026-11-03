@@ -48,9 +48,17 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: false
           tags: jatoba-finance:ci
+      # Confere que a imagem arm64 (Mac com chip Apple, Raspberry Pi) roda de verdade.
+      - name: Imagem arm64 funciona
+        run: |
+          docker buildx build --platform linux/arm64 --load -t jatoba-finance:arm64 .
+          docker run --rm --platform linux/arm64 --entrypoint sh jatoba-finance:arm64 -c \
+            'uname -m && node --version && pg_dump --version && age --version && jatoba help'

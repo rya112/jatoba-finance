@@ -13,7 +13,8 @@ Para quem mantém o repositório.
 
 - Versionamento semântico: `MAIOR.MENOR.CORREÇÃO`.
 - Toda mudança visível entra no `CHANGELOG.md` antes da release.
-- A release automática, com imagens multi-arquitetura no GitHub Container Registry, chega na fase 6.
+- O CI já constrói a imagem para amd64 e arm64 e confere que a arm64 roda. Para testar o backup completo em arm64 localmente (emulado, leva alguns minutos): `DOCKER_DEFAULT_PLATFORM=linux/arm64 JATOBA_TESTE_ESPERA=600 bash scripts/testar-backup.sh`.
+- A release automática, que publica essas imagens no GitHub Container Registry, chega na fase 6.
 
 ## Checklist de release (a partir da fase 6)
 
