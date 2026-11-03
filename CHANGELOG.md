@@ -18,6 +18,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Migrações do banco na partida, numa única transação: se uma falhar, nada muda e a aplicação não sobe.
 - `/health` também verifica o banco de dados.
 - Backups criptografados com `age`: `jatoba backup`, `jatoba list`, `jatoba restore` e `jatoba keygen`. Há backup automático antes de migrações e de restaurações. Veja `docs/backup.md`.
+- Leitor de OFX 1.x e 2.x (conta e cartão, Windows-1252 e UTF-8). `jatoba check <arquivo>` confere um extrato mostrando só um resumo, sem descrições nem valores.
 - Imagem Docker para amd64 e arm64 (Mac com chip Apple, Raspberry Pi 4 ou mais novo).
 
 ### Segurança

@@ -15,5 +15,14 @@ Tudo aqui é inventado: bancos, contas, pessoas e valores. **Nunca coloque extra
 | | Assinatura em meses seguidos | `STREAMING EXEMPLO` em setembro e outubro |
 | | Pagamento recebido na fatura (contraparte do pagamento) | `PAGAMENTO RECEBIDO` |
 | | Compras comuns | Restaurante, posto |
+| `ofx2-xml-utf8.ofx` | OFX 2.x em XML, UTF-8, com tags de fechamento | Acentos (`PADARIA SÃO JOÃO`) |
+| | Nome dentro de `<PAYEE>` e entidade `&amp;` | `LOJA A & B EXEMPLO` |
+| | `NAME` e `MEMO` iguais (não pode repetir) | `PIX RECEBIDO` |
+| `sgml-1252-conta-e-cartao.ofx` | OFX 1.x em Windows-1252 | Acentos (`AÇOUGUE`, `FARMÁCIA`) |
+| | Vírgula como separador decimal | `-45,90` e `-1.234,56` |
+| | Data com hora e fuso | `20261003143000.000[-3:BRT]` |
+| | `MEMO` vazio | Aluguel |
+| | Lançamento sem data (ignorado, com aviso) | FITID `S3` |
+| | Conta e cartão no mesmo arquivo | Dois extratos |
 
 Para um novo caso, crie um arquivo novo com um nome que diga o que ele testa e acrescente uma linha nesta tabela.

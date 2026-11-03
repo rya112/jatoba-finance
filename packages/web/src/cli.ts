@@ -1,5 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
-import { ConfigError, loadConfig, type Config } from "@jatoba/core";
+import { ConfigError, OfxError, loadConfig, parseOfx, type Config } from "@jatoba/core";
 import { BackupError, createBackup, generateKey, listBackups, restoreBackup } from "./backup.js";
 
 const HELP = `Uso: jatoba <comando>
@@ -9,6 +10,7 @@ const HELP = `Uso: jatoba <comando>
   restore <arquivo>    Restaura um backup. A chave privada entra pela entrada padrão:
                          docker compose exec -T app jatoba restore <arquivo> --confirmar < chave-backup.txt
   keygen               Gera o par de chaves dos backups
+  check <extrato.ofx>  Confere se um OFX é lido, mostrando só um resumo (sem descrições nem valores)
 
 Rode dentro do contêiner, por exemplo: docker compose exec app jatoba backup`;
 
@@ -91,6 +93,32 @@ async function main(args: string[]): Promise<number> {
       return 0;
     }
 
+    case "check": {
+      const path = rest[0];
+      if (!path) {
+        console.error("Informe o arquivo: jatoba check <extrato.ofx>");
+        return 2;
+      }
+      const { statements, warnings } = parseOfx(await readFile(path));
+      console.log(`Arquivo lido: ${statements.length} extrato(s). Nada foi importado nem gravado.\n`);
+      for (const [i, s] of statements.entries()) {
+        const ids = s.transactions.map((t) => t.externalId);
+        const missing = ids.filter((id) => !id).length;
+        const repeated = ids.length - missing - new Set(ids.filter(Boolean)).size;
+        const types = Object.entries(Object.groupBy(s.transactions, (t) => t.type))
+          .map(([type, list]) => `${type} ${list!.length}`)
+          .join(", ");
+        const dates = s.transactions.map((t) => t.date).sort();
+        console.log(`Extrato ${i + 1}: ${s.kind === "conta" ? "conta corrente" : "cartão de crédito"}, moeda ${s.currency}, conta final ${s.account.accountId.slice(-4)}`);
+        console.log(`  período informado: ${s.start ?? "?"} a ${s.end ?? "?"}; lançamentos de ${dates[0] ?? "-"} a ${dates.at(-1) ?? "-"}`);
+        console.log(`  lançamentos: ${s.transactions.length} (${types || "nenhum"})`);
+        console.log(`  FITID: ${missing} sem, ${repeated} repetido(s)`);
+        console.log(`  descrições vazias: ${s.transactions.filter((t) => !t.description).length}; saldo informado: ${s.ledgerBalance ? "sim" : "não"}`);
+      }
+      console.log(warnings.length ? `\nAvisos:\n${warnings.map((w) => `  - ${w}`).join("\n")}` : "\nSem avisos.");
+      return 0;
+    }
+
     case "keygen": {
       const { publicKey, secretKey } = await generateKey();
       console.log(`Chave PÚBLICA (vai no .env):
@@ -121,7 +149,7 @@ gere um par novo e faça um backup novo.`);
 try {
   process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-  if (error instanceof BackupError || error instanceof ConfigError) {
+  if (error instanceof BackupError || error instanceof ConfigError || error instanceof OfxError) {
     console.error(error.message);
     process.exitCode = 1;
   } else {
