@@ -36,6 +36,11 @@ export interface Statement {
   start?: string;
   end?: string;
   ledgerBalance?: { amount: Cents; date?: string };
+  /**
+   * "fatura": o arquivo é uma fatura de cartão inteira, e todos os lançamentos entram no mês
+   * de vencimento dela. Sem isso, cada lançamento entra no mês da própria data.
+   */
+  billing?: "fatura";
   transactions: Transaction[];
 }
 

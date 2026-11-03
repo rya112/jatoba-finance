@@ -120,6 +120,8 @@ export interface CsvLayout {
    * - "auto": decide pela maioria (numa fatura, a maioria das linhas é compra).
    */
   sign: "saida_negativa" | "saida_positiva" | "auto";
+  /** "fatura" quando cada arquivo é uma fatura inteira (ver Statement.billing). */
+  billing?: "fatura";
   columns: {
     date: string;
     description: string;
@@ -140,7 +142,10 @@ export const C6_FATURA: CsvLayout = {
   currency: "BRL",
   delimiter: ";",
   dateFormat: "dd/mm/aaaa",
-  sign: "auto",
+  // Confirmado com faturas reais: compras vêm positivas; pagamentos e estornos, negativos.
+  // Fixo (e não "auto") porque uma fatura curta, com mais estornos que compras, inverteria tudo.
+  sign: "saida_positiva",
+  billing: "fatura",
   columns: {
     date: "Data de Compra",
     description: "Descrição",
@@ -250,6 +255,7 @@ export function parseCsvStatement(input: Uint8Array | string, layout?: CsvLayout
     account: { accountId: chosen.id },
     start: dates[0],
     end: dates.at(-1),
+    billing: chosen.billing,
     transactions,
   };
   return { statements: [statement], warnings, layout: chosen, signInverted: invert };

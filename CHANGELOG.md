@@ -23,6 +23,8 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Página **Importar**: envie o OFX da conta ou o CSV da fatura do C6. Duplicados são ignorados, inclusive em períodos que se sobrepõem e em reenvios do mesmo arquivo.
 - Página **Lançamentos** com tudo o que foi importado, e menu de navegação.
 - Categorias (despesas, receitas e movimentações, que não contam como gasto) e página **Revisar**: cada lançamento chega com uma sugestão, vinda das suas regras, das regras do sistema (fatura, investimentos, salário, tarifas) ou da categoria do C6. Você confirma ou corrige; com “usar sempre”, a correção vira regra para os parecidos. Categoria escolhida à mão nunca é sobrescrita.
+- **Mês de competência**: compras do cartão do C6 entram no mês de vencimento da fatura (o mesmo do nome do arquivo, como `c6-202611-fatura.csv`), e lançamentos da conta no mês da data. Resolve parcelas que o C6 mostra com a mesma data em faturas diferentes. Em **Lançamentos**, cada compra do cartão mostra a fatura.
+- **Estornos** herdam a categoria da compra devolvida (mesmo valor, mesma conta, até 60 dias antes). Exemplo: a devolução mensal da anuidade do C6 anula a cobrança em “Impostos e taxas”.
 - **Possíveis duplicados**: lançamento novo com mesma conta, data e valor de um já existente, mas texto diferente, aparece em Revisar para você decidir (“é o mesmo” ou “são diferentes”). A cópia descartada fica guardada e não volta em novas importações.
 - Paginação em **Lançamentos**, com 50 por página.
 - Descrições limpas para exibir, sem prefixos como “PIX ENVIADO” e “COMPRA CARTAO DEBITO”; a original continua guardada.
@@ -30,6 +32,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 
 ### Correções
 
+- Sinal dos valores da fatura do C6 fixo (compras positivas, confirmado com faturas reais), em vez de decidido pela maioria das linhas, que erraria numa fatura curta com mais estornos que compras.
 - Duplicados em importações com períodos sobrepostos no C6, que gera FITIDs novos a cada exportação. Agora os duplicados são reconhecidos pelo conteúdo (data, valor, descrição e ocorrência), e a migração 0003 remove as cópias que já tinham entrado, mantendo sempre a primeira.
 
 ### Segurança

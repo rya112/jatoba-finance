@@ -101,8 +101,8 @@ describe.skipIf(!TEST_DATABASE_URL)("migração 0003: duplicados por FITID inst�
 
   it("a regra de unicidade volta a valer", async () => {
     await expect(
-      sql`insert into transactions (account_id, import_id, fingerprint, date, amount, description, type)
-          select account_id, import_id, fingerprint, date, amount, description, type from transactions where id = 1`,
+      sql`insert into transactions (account_id, import_id, fingerprint, date, month, amount, description, type)
+          select account_id, import_id, fingerprint, date, month, amount, description, type from transactions where id = 1`,
     ).rejects.toThrow(/transactions_account_fingerprint_key/);
   });
 });

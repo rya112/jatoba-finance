@@ -39,6 +39,18 @@ export interface ImportOutcome {
 
 export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
+/** "2026-10-17" → "2026-10-01". */
+function monthOf(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+/** Mês de vencimento de uma fatura: último dia de compra + 10 dias (bate com os nomes de arquivo do C6). */
+export function billingMonth(lastPurchaseDate: string): string {
+  const d = new Date(`${lastPurchaseDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 10);
+  return monthOf(d.toISOString().slice(0, 10));
+}
+
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -131,12 +143,14 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
       `;
 
       const prints = fingerprints(statement.transactions);
+      const faturaMonth = statement.billing === "fatura" && dates.length > 0 ? billingMonth(dates.at(-1)!) : undefined;
       const rows = statement.transactions.map((t, i) => ({
         account_id: account!.id,
         import_id: imp!.id,
         fingerprint: prints[i]!,
         external_id: t.externalId ?? null,
         date: t.date,
+        month: faturaMonth ?? monthOf(t.date),
         amount: t.amount,
         description: t.description,
         type: t.type,
@@ -161,6 +175,13 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
         insertedIds.push(...result.map((r) => r.id));
       }
       const duplicates = rows.length - inserted;
+      // Fatura exportada antes de fechar e de novo depois: o que já existia passa para o mês da fatura mais recente.
+      if (faturaMonth && duplicates > 0) {
+        await tx`
+          update transactions set month = ${faturaMonth}
+          where account_id = ${account!.id} and fingerprint = any(${tx.array(prints)}::text[]) and month < ${faturaMonth}
+        `;
+      }
       const suspects = await flagSuspects(tx as unknown as Sql, insertedIds.slice(insertedIds.length - inserted), prints);
       await tx`update imports set inserted = ${inserted}, duplicates = ${duplicates} where id = ${imp!.id}`;
 
@@ -193,6 +214,10 @@ export interface TransactionRow {
   cleanDescription?: string;
   categoryName?: string;
   reviewed?: boolean;
+  /** Mês de competência (AAAA-MM-01). No cartão, o mês de vencimento da fatura. */
+  month?: string;
+  accountKind?: "conta" | "cartao";
+  billing?: boolean;
   accountName: string;
   installment?: string;
   cardLast4?: string;
@@ -213,10 +238,14 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
       clean_description: string | null;
       category_name: string | null;
       reviewed: boolean;
+      month: string;
+      kind: "conta" | "cartao";
+      source: string;
     }[]
   >`
     select t.id, to_char(t.date, 'YYYY-MM-DD') as date, t.amount, a.currency, t.description, a.name as account_name,
-           t.installment_current, t.installment_total, t.card_last4, t.clean_description, c.name as category_name, t.reviewed
+           t.installment_current, t.installment_total, t.card_last4, t.clean_description, c.name as category_name, t.reviewed,
+           to_char(t.month, 'YYYY-MM-DD') as month, a.kind, a.source
     from transactions t join accounts a on a.id = t.account_id
     left join categories c on c.id = t.category_id
     where t.duplicate_of is null
@@ -235,6 +264,9 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
     cleanDescription: r.clean_description ?? undefined,
     categoryName: r.category_name ?? undefined,
     reviewed: r.reviewed,
+    month: r.month,
+    accountKind: r.kind,
+    billing: r.source === "c6-fatura",
   }));
 }
 

@@ -112,6 +112,13 @@ ${opts.section ? "" : '  <div class="anel" aria-hidden="true"></div>\n'}${body}
 </html>`;
 }
 
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** "2026-11-01" → "nov/2026". */
+export function monthLabel(iso: string): string {
+  return `${MONTHS[Number(iso.slice(5, 7)) - 1]}/${iso.slice(0, 4)}`;
+}
+
 /** "2026-10-05" → "05/10/2026". */
 function brDate(iso: string): string {
   const [y, m, d] = iso.split("-");
@@ -223,7 +230,11 @@ export function transactionsPage(
   }
   const body = rows
     .map((r) => {
-      const tags = [r.installment ? `parcela ${r.installment}` : "", r.cardLast4 ? `cartão ${r.cardLast4}` : ""]
+      const tags = [
+        r.installment ? `parcela ${r.installment}` : "",
+        r.cardLast4 ? `cartão ${r.cardLast4}` : "",
+        r.billing && r.month ? `fatura ${monthLabel(r.month)}` : "",
+      ]
         .filter(Boolean)
         .map((t) => `<span class="etiqueta">${escapeHtml(t)}</span>`)
         .join("");
@@ -277,6 +288,9 @@ function categorySelect(categories: Category[], selected: number | null): string
 function suggestionNote(r: ReviewRow, categories: Category[]): string {
   if (r.categoryId === null) return '<span class="sugestao">Sem sugestão.</span>';
   const name = categories.find((c) => c.id === r.categoryId)?.name ?? "";
+  if (r.categorySource === "estorno") {
+    return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, igual à compra estornada${r.refundOfDate ? ` de ${brDate(r.refundOfDate)}` : ""}.</span>`;
+  }
   if (r.categorySource === "regra") {
     return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, pela regra “${escapeHtml(r.rulePattern ?? "")}”.</span>`;
   }

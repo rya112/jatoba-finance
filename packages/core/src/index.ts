@@ -21,6 +21,7 @@ export {
 } from "./import/csv.js";
 export {
   importFile,
+  billingMonth,
   readStatementFile,
   fingerprints,
   listTransactions,
@@ -37,6 +38,7 @@ export {
   suggestCategory,
   sortRules,
   ruleMatches,
+  isRefund,
   categorize,
   listCategories,
   listRules,

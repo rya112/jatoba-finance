@@ -30,4 +30,4 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Fase 2: limpeza das descrições, regras de categoria e tela de revisão
 - [ ] Fase 2: CSV da Wise e perfil do Banco do Brasil (em espera)
 - [x] Fase 2: três meses importados sem duplicados e sem gasto contado duas vezes (critério de pronto; agosto a outubro, conta e cartão)
-- [ ] Fase 3: decidir em que mês entram as compras do cartão (data da compra ou fatura), por causa das parcelas com data repetida
+- [x] Fase 3: compras do cartão entram no mês de vencimento da fatura (decisão do autor)

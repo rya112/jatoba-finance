@@ -59,9 +59,9 @@ describe("fatura do C6 (CSV)", () => {
 describe("sinal dos valores", () => {
   const header = "Data de Compra;Nome no Cartão;Final do Cartão;Categoria;Descrição;Parcela;Valor (em US$);Cotação (em R$);Valor (em R$)";
 
-  it("no modo auto, não inverte se as compras já vierem negativas", () => {
+  it("no modo auto (bancos ainda não confirmados), não inverte se as compras já vierem negativas", () => {
     const csv = `${header}\n01/10/2026;A;1;X;COMPRA 1;;0;0;-10,00\n02/10/2026;A;1;X;COMPRA 2;;0;0;-20,00\n03/10/2026;A;1;X;PAGAMENTO;;0;0;30,00`;
-    const result = parseCsvStatement(csv);
+    const result = parseCsvStatement(csv, { ...C6_FATURA, sign: "auto" });
     expect(result.signInverted).toBe(false);
     expect(result.statements[0]!.transactions.map((t) => t.amount)).toEqual([-1000, -2000, 3000]);
   });
@@ -69,6 +69,17 @@ describe("sinal dos valores", () => {
   it("um layout com sinal fixo respeita a configuração", () => {
     const csv = `${header}\n01/10/2026;A;1;X;PAGAMENTO;;0;0;30,00`;
     expect(parseCsvStatement(csv, { ...C6_FATURA, sign: "saida_negativa" }).statements[0]!.transactions[0]!.amount).toBe(3000);
+  });
+});
+
+describe("C6 com sinal fixo", () => {
+  const header = "Data de Compra;Nome no Cartão;Final do Cartão;Categoria;Descrição;Parcela;Valor (em US$);Cotação (em R$);Valor (em R$)";
+  it("fatura curta, com mais estornos que compras, continua com o sinal certo", () => {
+    const csv = `${header}
+01/10/2026;A;1;X;COMPRA;;0;0;98.00
+02/10/2026;A;1;X;ESTORNO;;0;0;-98.00
+03/10/2026;A;1;X;PAGAMENTO;;0;0;-500.00`;
+    expect(parseCsvStatement(csv).statements[0]!.transactions.map((t) => t.amount)).toEqual([-9800, 9800, 50000]);
   });
 });
 

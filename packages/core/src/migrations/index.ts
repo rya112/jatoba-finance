@@ -185,4 +185,25 @@ export const MIGRATIONS: readonly Migration[] = [
       where n.id = o.new_id;
     `,
   },
+  {
+    id: "0006_billing_month_and_refunds",
+    sql: `
+      -- Mês de competência: na conta, o mês da data; no cartão do C6, o mês de vencimento da fatura
+      -- (último dia de compra do arquivo + 10 dias, que bate com o nome dos arquivos do C6).
+      -- Necessário porque o C6 às vezes repete a data da compra em parcelas de faturas diferentes.
+      alter table transactions add column month date;
+      update transactions t
+      set month = date_trunc('month', case when a.source = 'c6-fatura' then coalesce(i.last_date, t.date) + 10 else t.date end)::date
+      from accounts a, imports i
+      where a.id = t.account_id and i.id = t.import_id;
+      alter table transactions alter column month set not null;
+      create index transactions_month_idx on transactions (month);
+
+      -- Estorno herda a categoria da compra que ele devolve.
+      alter table transactions drop constraint transactions_category_source_check;
+      alter table transactions add constraint transactions_category_source_check
+        check (category_source in ('manual', 'regra', 'banco', 'estorno'));
+      alter table transactions add column refund_of bigint references transactions (id) on delete set null;
+    `,
+  },
 ];
