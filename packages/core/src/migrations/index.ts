@@ -162,4 +162,27 @@ export const MIGRATIONS: readonly Migration[] = [
       create index transactions_pending_review_idx on transactions (date) where not reviewed;
     `,
   },
+  {
+    id: "0005_duplicates",
+    sql: `
+      -- duplicate_of: cópia confirmada de outro lançamento. Fica guardada para a impressão digital
+      -- continuar barrando reimportações, mas some de listas, revisão e somas.
+      -- suspect_of: possível cópia (mesma conta, data e valor, texto diferente), esperando decisão.
+      alter table transactions
+        add column duplicate_of  bigint references transactions (id) on delete set null,
+        add column suspect_of    bigint references transactions (id) on delete set null;
+      create index transactions_suspect_idx on transactions (suspect_of) where suspect_of is not null;
+
+      -- Marca como suspeitos os pares que já existem: o mais novo aponta para o mais antigo.
+      update transactions n set suspect_of = o.id
+      from (
+        select distinct on (n.id) n.id as new_id, e.id
+        from transactions n
+        join transactions e on e.account_id = n.account_id and e.date = n.date and e.amount = n.amount
+          and e.import_id < n.import_id and upper(e.description) <> upper(n.description)
+        order by n.id, e.id
+      ) o
+      where n.id = o.new_id;
+    `,
+  },
 ];

@@ -51,3 +51,4 @@ export {
   type ReviewRow,
   type Suggestion,
 } from "./categories.js";
+export { flagSuspects, listSuspects, resolveSuspect, countSuspects, DuplicateError, type SuspectPair } from "./duplicates.js";

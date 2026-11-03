@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Sql } from "../db.js";
 import { categorize } from "../categories.js";
+import { flagSuspects } from "../duplicates.js";
 import { decodeText, detectLayout, parseCsvStatement, CsvError } from "./csv.js";
 import { parseOfx } from "./ofx.js";
 import type { ImportResult, Statement, Transaction } from "./types.js";
@@ -24,6 +25,8 @@ export interface ImportSummary {
   total: number;
   inserted: number;
   duplicates: number;
+  /** Novos que parecem cópia de um já existente com outro texto; ficam para você decidir. */
+  suspects: number;
 }
 
 export interface ImportOutcome {
@@ -158,6 +161,7 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
         insertedIds.push(...result.map((r) => r.id));
       }
       const duplicates = rows.length - inserted;
+      const suspects = await flagSuspects(tx as unknown as Sql, insertedIds.slice(insertedIds.length - inserted), prints);
       await tx`update imports set inserted = ${inserted}, duplicates = ${duplicates} where id = ${imp!.id}`;
 
       summaries.push({
@@ -170,6 +174,7 @@ export async function importFile(sql: Sql, fileName: string, bytes: Uint8Array):
         total: rows.length,
         inserted,
         duplicates,
+        suspects,
       });
     }
 
@@ -214,6 +219,7 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
            t.installment_current, t.installment_total, t.card_last4, t.clean_description, c.name as category_name, t.reviewed
     from transactions t join accounts a on a.id = t.account_id
     left join categories c on c.id = t.category_id
+    where t.duplicate_of is null
     order by t.date desc, t.id desc
     limit ${limit} offset ${offset}
   `;
@@ -233,6 +239,6 @@ export async function listTransactions(sql: Sql, { limit = 200, offset = 0 } = {
 }
 
 export async function countTransactions(sql: Sql): Promise<number> {
-  const [row] = await sql<{ n: string }[]>`select count(*) as n from transactions`;
+  const [row] = await sql<{ n: string }[]>`select count(*) as n from transactions where duplicate_of is null`;
   return Number(row?.n ?? 0);
 }

@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type ReviewRow, type TransactionRow } from "@jatoba/core";
+import { CategoryError, DuplicateError, ImportError, MAX_IMPORT_BYTES, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 import { homePage, importPage, loginPage, reviewPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
@@ -30,6 +30,8 @@ export interface AppDeps {
     list: (opts?: { limit?: number }) => Promise<{ rows: ReviewRow[]; total: number; withSuggestion: number }>;
     setCategory: (id: string, categoryId: number, opts?: { rulePattern?: string }) => Promise<{ otherChanged: number; ruleCreated: boolean }>;
     approve: (ids: string[]) => Promise<number>;
+    suspects: () => Promise<SuspectPair[]>;
+    resolve: (id: string, decision: "duplicado" | "distinto") => Promise<void>;
   };
 }
 
@@ -124,8 +126,8 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   app.get("/", async (c) => {
-    const [count, review] = await Promise.all([deps.ledger.count(), deps.review.list({ limit: 1 })]);
-    return c.html(homePage(deps.version, count, review.total));
+    const [count, review, suspects] = await Promise.all([deps.ledger.count(), deps.review.list({ limit: 1 }), deps.review.suspects()]);
+    return c.html(homePage(deps.version, count, review.total + suspects.length));
   });
 
   app.get("/importar", (c) => c.html(importPage()));
@@ -164,16 +166,19 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   const showReview = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
-    const [list, categories] = await Promise.all([deps.review.list({ limit: 50 }), deps.review.categories()]);
-    return c.html(reviewPage({ ...list, categories, ...flash }), status);
+    const [list, categories, suspects] = await Promise.all([deps.review.list({ limit: 50 }), deps.review.categories(), deps.review.suspects()]);
+    return c.html(reviewPage({ ...list, categories, suspects, ...flash }), status);
   };
 
   app.get("/revisar", (c) => {
     const salvo = c.req.query("salvo");
     const outros = Number(c.req.query("outros") ?? 0);
     const aprovados = c.req.query("aprovados");
+    const duplicado = c.req.query("duplicado");
     let message: string | undefined;
-    if (aprovados !== undefined) message = `${Number(aprovados) || 0} sugestão(ões) aprovada(s).`;
+    if (duplicado === "descartado") message = "Duplicado descartado. Ele não aparece mais e não volta em novas importações.";
+    else if (duplicado === "mantido") message = "Mantidos os dois lançamentos.";
+    else if (aprovados !== undefined) message = `${Number(aprovados) || 0} sugestão(ões) aprovada(s).`;
     else if (salvo === "regra") message = `Categoria salva e regra criada${outros > 0 ? `; ${outros} outro(s) lançamento(s) ganharam sugestão` : ""}.`;
     else if (salvo !== undefined) message = "Categoria salva.";
     return showReview(c, { message });
@@ -203,6 +208,21 @@ export function createApp(deps: AppDeps): Hono {
       if (error instanceof CategoryError) return showReview(c, { error: error.message }, 400);
       throw error;
     }
+  });
+
+  app.post("/duplicados/:id", bodyLimit({ maxSize: 1024 }), async (c) => {
+    const id = c.req.param("id");
+    if (!/^\d+$/.test(id)) return c.text("Lançamento inválido.", 404);
+    const form = await c.req.parseBody();
+    const decision = form.decisao;
+    if (decision !== "duplicado" && decision !== "distinto") return showReview(c, { error: "Decisão inválida." }, 400);
+    try {
+      await deps.review.resolve(id, decision);
+    } catch (error) {
+      if (error instanceof DuplicateError) return showReview(c, { error: error.message }, 400);
+      throw error;
+    }
+    return c.redirect(`/revisar?duplicado=${decision === "duplicado" ? "descartado" : "mantido"}`, 303);
   });
 
   return app;

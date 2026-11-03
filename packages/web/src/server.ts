@@ -8,6 +8,8 @@ import {
   categorize,
   listCategories,
   listForReview,
+  listSuspects,
+  resolveSuspect,
   setCategory,
   connect,
   countTransactions,
@@ -109,6 +111,8 @@ const app = createApp({
     list: (opts) => listForReview(sql, opts),
     setCategory: (id, categoryId, opts) => setCategory(sql, id, categoryId, opts),
     approve: (ids) => approveSuggestions(sql, ids),
+    suspects: () => listSuspects(sql),
+    resolve: (id, decision) => resolveSuspect(sql, id, decision),
   },
 });
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp, SESSION_COOKIE } from "../src/app.js";
 import { Credentials, LoginLimiter, MemorySessionStore } from "../src/auth.js";
-import { readStatementFile, type Category, type ImportOutcome, type ReviewRow, type TransactionRow } from "@jatoba/core";
+import { DuplicateError, readStatementFile, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 const CATEGORIES: Category[] = [
   { id: 1, name: "Mercado", kind: "despesa" },
@@ -15,7 +15,11 @@ function memoryReview() {
     { id: "10", date: "2026-10-01", amount: -1234, currency: "BRL", description: "COMPRA <b>MERCADO</b>", cleanDescription: "<b>MERCADO</b>", accountName: "Conta", accountKind: "conta", categoryId: null, categorySource: null, rulePattern: null, bankCategory: null },
     { id: "11", date: "2026-10-02", amount: -500, currency: "BRL", description: "PAGAMENTO FATURA", cleanDescription: "PAGAMENTO FATURA", accountName: "Conta", accountKind: "conta", categoryId: 3, categorySource: "regra", rulePattern: "FATURA", bankCategory: null },
   ];
-  const calls: { set: unknown[]; approve: string[][] } = { set: [], approve: [] };
+  const calls: { set: unknown[]; approve: string[][]; resolve: unknown[] } = { set: [], approve: [], resolve: [] };
+  const suspects: SuspectPair[] = [
+    { id: "20", date: "2026-10-17", amount: 8010, currency: "BRL", accountName: "Conta", description: "TRANSFERENCIA <i>ORIGEM</i>", fileName: "agosto-a-novembro.ofx",
+      original: { id: "5", description: "PIX RECEBIDO", fileName: "outubro.ofx", categoryName: "Reembolsos", reviewed: true } },
+  ];
   return {
     rows,
     calls,
@@ -37,6 +41,14 @@ function memoryReview() {
       calls.approve.push(ids);
       return ids.length;
     },
+    async suspects() {
+      return suspects;
+    },
+    async resolve(id: string, decision: "duplicado" | "distinto") {
+      if (!suspects.some((x) => x.id === id)) throw new DuplicateError("Este lançamento não está marcado como possível duplicado.");
+      calls.resolve.push([id, decision]);
+      suspects.splice(suspects.findIndex((x) => x.id === id), 1);
+    },
   };
 }
 
@@ -53,7 +65,7 @@ function memoryLedger() {
       }
       return {
         fileName,
-        statements: [{ importId: 1, accountId: 1, accountName: "Conta teste", format: "ofx", total: s.transactions.length, inserted: s.transactions.length, duplicates: 0 }],
+        statements: [{ importId: 1, accountId: 1, accountName: "Conta teste", format: "ofx", total: s.transactions.length, inserted: s.transactions.length, duplicates: 0, suspects: fileName.includes("suspeito") ? 1 : 0 }],
         warnings,
       };
     },
@@ -343,7 +355,7 @@ describe("revisar", () => {
   it("a página inicial avisa quantos faltam revisar", async () => {
     const { app, cookie } = await loggedIn();
     await upload(app, cookie, "extrato.ofx", OFX);
-    expect(await (await app.request("/", { headers: { Cookie: cookie } })).text()).toContain("2 lançamento(s) para revisar");
+    expect(await (await app.request("/", { headers: { Cookie: cookie } })).text()).toContain("3 lançamento(s) para revisar"); // 2 de categoria + 1 possível duplicado
   });
 });
 
@@ -391,4 +403,49 @@ describe("paginação de lançamentos", () => {
     expect(await page("?pagina=abc")).toContain("Página 1 de 3");
     expect(await page("?pagina=-5")).toContain("Página 1 de 3");
   });
+});
+
+describe("possíveis duplicados na página", () => {
+  it("aparecem antes das categorias, lado a lado e escapados", async () => {
+    const { app, cookie } = await loggedIn();
+    const html = await (await app.request("/revisar", { headers: { Cookie: cookie } })).text();
+    expect(html.indexOf("Possíveis duplicados")).toBeLessThan(html.indexOf("lançamento(s) para revisar"));
+    expect(html).toContain("Já existia (de outubro.ofx) · Reembolsos");
+    expect(html).toContain("Chegou agora (de agosto-a-novembro.ofx)");
+    expect(html).toContain("&#60;i&#62;ORIGEM&#60;/i&#62;");
+    expect(html.replace(/\s/g, " ")).toContain("R$ 80,10");
+  });
+
+  it("“é o mesmo” descarta e volta com mensagem", async () => {
+    const { app, cookie } = await loggedIn();
+    const res = await post(app, "/duplicados/20", cookie, [["decisao", "duplicado"]]);
+    expect(res.headers.get("location")).toBe("/revisar?duplicado=descartado");
+    expect(review.calls.resolve).toEqual([["20", "duplicado"]]);
+    const html = await (await app.request(res.headers.get("location")!, { headers: { Cookie: cookie } })).text();
+    expect(html).toContain("Duplicado descartado");
+    expect(html).not.toContain("Possíveis duplicados");
+  });
+
+  it("“são diferentes” mantém os dois", async () => {
+    const { app, cookie } = await loggedIn();
+    const res = await post(app, "/duplicados/20", cookie, [["decisao", "distinto"]]);
+    expect(res.headers.get("location")).toBe("/revisar?duplicado=mantido");
+    expect(review.calls.resolve).toEqual([["20", "distinto"]]);
+  });
+
+  it("recusa decisão inválida, id inválido, não suspeito e envio de outro site", async () => {
+    const { app, cookie } = await loggedIn();
+    expect((await post(app, "/duplicados/20", cookie, [["decisao", "apagar"]])).status).toBe(400);
+    expect((await post(app, "/duplicados/x", cookie, [["decisao", "duplicado"]])).status).toBe(404);
+    expect((await post(app, "/duplicados/999", cookie, [["decisao", "duplicado"]])).status).toBe(400);
+    expect((await post(app, "/duplicados/20", cookie, [["decisao", "duplicado"]], "https://site-malicioso.example")).status).toBe(403);
+    expect(review.calls.resolve).toEqual([]);
+  });
+
+  it("a importação avisa quando encontra possíveis duplicados", async () => {
+    const { app, cookie } = await loggedIn();
+    const html = await (await upload(app, cookie, "suspeito.ofx", OFX)).text();
+    expect(html).toContain("1 possível(is) duplicado(s)");
+  });
+
 });

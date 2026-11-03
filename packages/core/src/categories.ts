@@ -167,7 +167,7 @@ export async function categorize(sql: Sql, opts: { onlyIds?: string[] } = {}): P
   >`
     select t.id, t.description, t.amount, a.kind, t.bank_category, t.clean_description, t.category_id, t.rule_id, t.category_source
     from transactions t join accounts a on a.id = t.account_id
-    where not t.reviewed and coalesce(t.category_source, '') <> 'manual'
+    where not t.reviewed and coalesce(t.category_source, '') <> 'manual' and t.duplicate_of is null
       ${opts.onlyIds ? sql`and t.id = any(${sql.array(opts.onlyIds)}::bigint[])` : sql``}
   `;
 
@@ -228,12 +228,12 @@ export async function listForReview(sql: Sql, { limit = 50 } = {}): Promise<{ ro
     from transactions t
     join accounts a on a.id = t.account_id
     left join rules r on r.id = t.rule_id
-    where not t.reviewed
+    where not t.reviewed and t.duplicate_of is null and t.suspect_of is null
     order by (t.category_id is null) desc, t.date desc, t.id desc
     limit ${limit}
   `;
   const [counts] = await sql<{ total: string; with_suggestion: string }[]>`
-    select count(*) as total, count(category_id) as with_suggestion from transactions where not reviewed
+    select count(*) as total, count(category_id) as with_suggestion from transactions where not reviewed and duplicate_of is null and suspect_of is null
   `;
   return {
     rows: rows.map((r) => ({

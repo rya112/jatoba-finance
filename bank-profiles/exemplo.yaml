@@ -1,4 +1,4 @@
-# Rascunho do formato de perfil de banco. Será definido na fase 2.
+# Proposta de formato em YAML, ainda NÃO usada pelo Jatobá (os bancos estão em código; veja README.md).
 id: banco-exemplo
 nome: Banco Exemplo
 formatos: [ofx]

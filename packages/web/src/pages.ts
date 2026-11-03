@@ -1,4 +1,4 @@
-import { formatMoney, normalizeText, type Category, type ImportOutcome, type ReviewRow, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type Category, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -95,6 +95,11 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .paginas a:hover { text-decoration: underline; }
   .paginas .desligado { color: var(--suave); opacity: 0.6; }
   .paginas [aria-current] { font-weight: 600; }
+  .duplicado { border-color: var(--cerne); }
+  .duplicado .lados { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+  .duplicado .lado { background: var(--painel); border-radius: 0.5rem; padding: 0.5rem 0.75rem; overflow-wrap: anywhere; }
+  .duplicado .lado small { display: block; color: var(--suave); }
+  .duplicado form { display: inline-flex; margin: 0.6rem 0.6rem 0 0; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -157,7 +162,7 @@ function importResult(outcome: ImportOutcome): string {
       const period = s.firstDate && s.lastDate ? ` de ${brDate(s.firstDate)} a ${brDate(s.lastDate)}` : "";
       return `<li><strong>${escapeHtml(s.accountName)}</strong>${period}: ${s.inserted} novo(s)${
         s.duplicates ? `, ${s.duplicates} já existia(m) e foi(ram) ignorado(s)` : ""
-      }.</li>`;
+      }.${s.suspects ? ` <strong>${s.suspects} possível(is) duplicado(s)</strong> com texto diferente: confira em <a href="/revisar">Revisar</a>.` : ""}</li>`;
     })
     .join("");
   const warnings = outcome.warnings.length
@@ -278,15 +283,41 @@ function suggestionNote(r: ReviewRow, categories: Category[]): string {
   return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, pela categoria do banco (${escapeHtml(r.bankCategory ?? "")}).</span>`;
 }
 
+function suspectsSection(suspects: SuspectPair[]): string {
+  if (suspects.length === 0) return "";
+  const cards = suspects
+    .map(
+      (d) => `<li class="cartao duplicado">
+      <div class="cabeca">
+        <span class="descricao">Possível duplicado · ${brDate(d.date)} · ${escapeHtml(d.accountName)}</span>
+        <span class="valor${d.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(d.amount, "pt-BR", d.currency))}</span>
+      </div>
+      <div class="lados">
+        <div class="lado"><small>Já existia (de ${escapeHtml(d.original.fileName)})${d.original.categoryName ? ` · ${escapeHtml(d.original.categoryName)}` : ""}</small>${escapeHtml(d.original.description)}</div>
+        <div class="lado"><small>Chegou agora (de ${escapeHtml(d.fileName)})</small>${escapeHtml(d.description)}</div>
+      </div>
+      <form method="post" action="/duplicados/${escapeHtml(d.id)}"><input type="hidden" name="decisao" value="duplicado"><button type="submit">É o mesmo: descartar o que chegou agora</button></form>
+      <form method="post" action="/duplicados/${escapeHtml(d.id)}"><input type="hidden" name="decisao" value="distinto"><button class="discreto" type="submit">São diferentes: manter os dois</button></form>
+    </li>`,
+    )
+    .join("");
+  return `<h2>Possíveis duplicados</h2>
+  <p class="suave">Mesma conta, data e valor, com texto diferente. Às vezes o banco muda o texto entre uma exportação e outra. Confira no app do banco se houve um lançamento ou dois.</p>
+  <ul class="cartoes">${cards}</ul>
+  <h2>Categorias</h2>`;
+}
+
 export function reviewPage(opts: {
   rows: ReviewRow[];
   total: number;
   withSuggestion: number;
   categories: Category[];
+  suspects?: SuspectPair[];
   message?: string;
   error?: string;
 }): string {
   const { rows, total, withSuggestion, categories } = opts;
+  const suspects = suspectsSection(opts.suspects ?? []);
   const flash = [
     opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
     opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : "",
@@ -295,8 +326,8 @@ export function reviewPage(opts: {
   if (total === 0) {
     return layout(
       "Revisar · Jatobá Finance",
-      `  <h1>Revisar</h1>${flash}
-  <p>Tudo revisado. Quando importar novos extratos, os lançamentos aparecem aqui.</p>`,
+      `  <h1>Revisar</h1>${flash}${suspects}
+  <p>${suspects ? "Categorias: tudo revisado." : "Tudo revisado."} Quando importar novos extratos, os lançamentos aparecem aqui.</p>`,
       { section: "revisar" },
     );
   }
@@ -334,7 +365,7 @@ export function reviewPage(opts: {
     : "";
   return layout(
     "Revisar · Jatobá Finance",
-    `  <h1>Revisar</h1>${flash}
+    `  <h1>Revisar</h1>${flash}${suspects}
   <p>${total.toLocaleString("pt-BR")} lançamento(s) para revisar, ${withSuggestion.toLocaleString("pt-BR")} com sugestão. Os sem sugestão aparecem primeiro.</p>
   <p class="suave">Confira a categoria e salve. Marque “usar sempre” para criar uma regra: ela vale para todos os lançamentos parecidos, inclusive os próximos.</p>
   ${approveAll}
