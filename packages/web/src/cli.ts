@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
+import { Readable } from "node:stream";
 import { ConfigError, CsvError, OfxError, loadConfig, type Config } from "@jatoba/core";
 import { BackupError, createBackup, generateKey, listBackups, restoreBackup } from "./backup.js";
 import { checkFile } from "./check.js";
@@ -8,8 +9,9 @@ const HELP = `Uso: jatoba <comando>
 
   backup               Cria um backup criptografado do banco em ${"$"}JATOBA_BACKUP_DIR
   list                 Lista os backups
-  restore <arquivo>    Restaura um backup. A chave privada entra pela entrada padrão:
-                         docker compose exec -T app jatoba restore <arquivo> --confirmar < chave-backup.txt
+  restore <arquivo>    Restaura um backup, com a chave privada num arquivo na pasta backups/:
+                         docker compose exec app jatoba restore <arquivo> --chave chave-backup.txt --confirmar
+                       (ou pela entrada padrão: ... --confirmar < chave-backup.txt)
   keygen               Gera o par de chaves dos backups
   check <arquivo>      Confere se um extrato OFX ou CSV é lido, mostrando só um resumo (sem descrições nem valores)
 
@@ -60,18 +62,46 @@ async function main(args: string[]): Promise<number> {
 
     case "restore": {
       const cfg = config();
-      const name = rest.find((arg) => !arg.startsWith("--"));
+      // Argumentos: <arquivo> [--chave <arquivo-da-chave>] [--confirmar]
+      const keyIndex = rest.indexOf("--chave");
+      const keyName = keyIndex >= 0 ? rest[keyIndex + 1] : undefined;
+      const name = rest.find((arg, i) => !arg.startsWith("--") && !(keyIndex >= 0 && i === keyIndex + 1));
       if (!name) {
         console.error("Informe o arquivo. Veja os disponíveis com: docker compose exec app jatoba list");
         return 2;
       }
+      if (keyIndex >= 0 && !keyName) {
+        console.error("Depois de --chave, informe o nome do arquivo da chave privada que está na pasta backups/.");
+        return 2;
+      }
       const file = isAbsolute(name) ? name : join(cfg.JATOBA_BACKUP_DIR, basename(name));
-      if (process.stdin.isTTY) {
+      if (!keyName && process.stdin.isTTY) {
         console.error(
-          "A chave privada precisa entrar pela entrada padrão, sem aparecer na tela:\n" +
-            `  docker compose exec -T app jatoba restore ${basename(file)} --confirmar < chave-backup.txt`,
+          "Informe a chave privada sem que ela apareça na tela. O jeito mais simples, em qualquer sistema:\n" +
+            "  1. salve a chave num arquivo, por exemplo chave-backup.txt, dentro da pasta backups/\n" +
+            `  2. docker compose exec app jatoba restore ${basename(file)} --chave chave-backup.txt --confirmar\n` +
+            "  3. apague o arquivo da chave em seguida",
         );
         return 2;
+      }
+      let identity: Readable = process.stdin;
+      let keyPath: string | undefined;
+      if (keyName) {
+        keyPath = join(cfg.JATOBA_BACKUP_DIR, basename(keyName));
+        let text: string;
+        try {
+          text = await readFile(keyPath, "utf8");
+        } catch {
+          console.error(`Não encontrei a chave em backups/${basename(keyName)}. Salve o arquivo da chave privada na pasta backups/ do Jatobá.`);
+          return 1;
+        }
+        // Só as linhas da chave: tira fins de linha do Windows, espaços, BOM e comentários.
+        const keys = text.replace(/^﻿/, "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^AGE-SECRET-KEY-1[0-9A-Z]+$/.test(l));
+        if (keys.length === 0) {
+          console.error(`O arquivo backups/${basename(keyName)} não contém uma chave privada do age (uma linha que começa com AGE-SECRET-KEY-1).`);
+          return 1;
+        }
+        identity = Readable.from([`${keys.join("\n")}\n`]);
       }
       if (!rest.includes("--confirmar")) {
         console.error(
@@ -88,9 +118,10 @@ async function main(args: string[]): Promise<number> {
         reason: "antes-restauracao",
       });
       console.log(`Backup de segurança do estado atual: ${basename(safety)}`);
-      await restoreBackup({ databaseUrl: cfg.DATABASE_URL, file, identity: process.stdin });
+      await restoreBackup({ databaseUrl: cfg.DATABASE_URL, file, identity });
       console.log(`Restaurado: ${basename(file)}`);
       console.log("Agora reinicie a aplicação para ela conferir o banco: docker compose restart app");
+      if (keyPath) console.log(`Importante: apague a chave privada da pasta backups/ (${basename(keyPath)}). Ela não deve ficar neste computador.`);
       return 0;
     }
 

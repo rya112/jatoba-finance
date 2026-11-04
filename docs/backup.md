@@ -42,15 +42,22 @@ Backups automáticos:
 
 ## Restaurar
 
-1. Salve a chave privada num arquivo, por exemplo `chave-backup.txt`, na pasta do Jatobá, só durante a restauração.
-2. Rode, trocando pelo nome do backup:
+1. Veja os backups disponíveis: `docker compose exec app jatoba list`.
+2. Salve a chave privada (a linha `AGE-SECRET-KEY-...`) num arquivo **dentro da pasta `backups/`**, por exemplo `backups/chave-backup.txt`. Pode ser pelo Bloco de Notas; o Jatobá ignora fins de linha do Windows e comentários.
+3. Rode, trocando pelo nome do backup (funciona igual no PowerShell, no Linux e no Mac):
 
    ```bash
-   docker compose exec -T app jatoba restore jatoba-20261103-091530-manual.sql.age --confirmar < chave-backup.txt
+   docker compose exec app jatoba restore jatoba-20261103-091530-manual.sql.age --chave chave-backup.txt --confirmar
    docker compose restart app
    ```
 
-3. **Apague o `chave-backup.txt`** em seguida.
+4. **Apague o `backups/chave-backup.txt`** em seguida. A chave privada não deve ficar no computador.
+
+Também dá para passar a chave pela entrada padrão, no Linux e no Mac: `docker compose exec -T app jatoba restore <arquivo> --confirmar < chave-backup.txt`. No PowerShell isso não funciona (o `<` não é aceito); use o `--chave`.
+
+### Ensaio de restauração
+
+Vale ensaiar uma vez, para ter certeza de que a chave guardada funciona. Ao restaurar, os dados atuais são substituídos pelos do backup: o que você fez **depois** do backup escolhido (revisões, regras, importações) volta para trás. Por isso, faça o ensaio logo depois de um backup (**Ajustes → Fazer backup agora**) e restaure **esse** backup: nada se perde. Se algo der errado, o backup de segurança `...-antes-restauracao.sql.age`, criado automaticamente, guarda o estado de antes.
 
 O que a restauração garante:
 

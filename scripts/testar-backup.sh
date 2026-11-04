@@ -87,6 +87,34 @@ dc logs --no-log-prefix app | grep -q "Backup antes das migrações" && ok "back
 check "migração reaplicada" "$(sql "select count(*) from schema_migrations where id = '0001_sessions'")" "1"
 ls "$TMP/backups" | grep -q antes-migracao && ok "arquivo antes-migracao na pasta" || fail "arquivo antes-migracao"
 
+echo "== Restauração com --chave (funciona no PowerShell, sem redirecionamento)"
+sql "update marcador set valor = 'mudou de novo';" >/dev/null
+# Como o Bloco de Notas do Windows salva: BOM, CRLF e uma linha de comentário.
+printf '\xef\xbb\xbf# minha chave\r\n%s\r\n' "$(cat "$TMP/chave.txt")" > "$TMP/backups/chave-windows.txt"
+set +e
+dc exec -T app jatoba restore "$FILE" --chave nao-existe.txt --confirmar > "$TMP/saida.txt" 2>&1; CODE=$?
+set -e
+check "chave inexistente: erro claro" "$CODE" "1"
+grep -q "Não encontrei a chave" "$TMP/saida.txt" && ok "mensagem de chave não encontrada" || fail "mensagem: $(cat "$TMP/saida.txt")"
+printf 'isto não é uma chave\r\n' > "$TMP/backups/sem-chave.txt"
+set +e
+dc exec -T app jatoba restore "$FILE" --chave sem-chave.txt --confirmar > "$TMP/saida.txt" 2>&1; CODE=$?
+set -e
+check "arquivo sem chave: erro claro" "$CODE" "1"
+check "dados intactos" "$(sql "select valor from marcador")" "mudou de novo"
+OUT="$(dc exec -T app jatoba restore "$FILE" --chave chave-windows.txt --confirmar)"
+check "restaura com a chave salva no Windows (BOM e CRLF)" "$(sql "select valor from marcador")" "original"
+echo "$OUT" | grep -q "apague a chave privada" && ok "lembra de apagar a chave" || fail "sem lembrete de apagar a chave"
+# Com terminal (como no PowerShell, sem -T): também precisa funcionar.
+sql "update marcador set valor = 'com tty';" >/dev/null
+if script -qc true /dev/null >/dev/null 2>&1; then
+  script -qc "docker compose --project-name jatoba-teste --project-directory '$ROOT' -f '$ROOT/compose.yaml' -f '$TMP/compose.teste.yaml' --env-file '$TMP/teste.env' exec app jatoba restore '$FILE' --chave chave-windows.txt --confirmar" /dev/null > /dev/null 2>&1 || true
+  check "restaura com terminal (sem -T)" "$(sql "select valor from marcador")" "original"
+fi
+rm -f "$TMP/backups/chave-windows.txt" "$TMP/backups/sem-chave.txt"
+dc restart app >/dev/null 2>&1
+wait_healthy
+
 echo "== Backup diário automático"
 until=$((SECONDS + ${JATOBA_TESTE_ESPERA_DIARIO:-180}))
 while [ "$SECONDS" -lt "$until" ] && ! ls "$TMP/backups" | grep -q -- "-diario.sql.age"; do sleep 5; done
