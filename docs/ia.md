@@ -14,7 +14,7 @@ Usa o **Claude Haiku 5.5** (`claude-haiku-5-5`), o modelo mais barato, com racio
 
 ## Ligar
 
-1. Crie uma chave de API em **console.anthropic.com → API Keys** (precisa de créditos na conta; uma assinatura do Claude, como Pro ou Max, não serve como chave de API).
+1. Crie uma chave de API em **console.anthropic.com → API Keys** (precisa de créditos na conta). A chave começa com `sk-ant-`; copie-a inteira, sem aspas nem espaços.
 2. No `.env`:
 
    ```
