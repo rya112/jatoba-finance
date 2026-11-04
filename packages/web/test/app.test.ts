@@ -133,6 +133,7 @@ async function makeApp(publicUrl?: string) {
       },
     },
     review,
+    transaction: { get: async () => undefined, reopen: async () => {} },
     subscriptions: { list: async () => ({ active: [], stopped: [], ignored: [], monthlyTotal: 0 }), ignore: async () => {}, unignore: async () => {} },
     goals: {
       today: () => "2026-11-03", list: async () => [], entries: async () => [], investments: async () => [],

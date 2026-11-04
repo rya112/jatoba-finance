@@ -8,6 +8,8 @@ import {
   categorize,
   listCategories,
   listForReview,
+  getTransaction,
+  reopenReview,
   listSubscriptions,
   ignoreSubscription,
   unignoreSubscription,
@@ -134,6 +136,10 @@ const app = createApp({
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
+  },
+  transaction: {
+    get: (id) => getTransaction(sql, id),
+    reopen: (id) => reopenReview(sql, id),
   },
   subscriptions: {
     list: () => listSubscriptions(sql, today(), config.JATOBA_CURRENCY),

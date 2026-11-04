@@ -63,6 +63,7 @@ async function setup() {
     review: { categories: empty, list: async () => ({ rows: [], total: 0, withSuggestion: 0 }), setCategory: async () => ({ otherChanged: 0, ruleCreated: false }), approve: async () => 0, suspects: empty, resolve: async () => {} },
     month: { months: empty, summary: async () => { throw new Error("sem meses"); } },
     settings: { categories: empty, rules: empty, accounts: empty, createCategory: async () => 1, updateCategory: async () => {}, deleteCategory: async () => 0, createRule: async () => 0, updateRule: async () => 0, deleteRule: async () => 0, renameAccount: async () => {} },
+    transaction: { get: async () => undefined, reopen: async () => {} },
     subscriptions: { list: async () => ({ active: [], stopped: [], ignored: [], monthlyTotal: 0 }), ignore: async () => {}, unignore: async () => {} },
     goals,
   });

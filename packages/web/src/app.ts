@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
-import { goalsPage, homePage, subscriptionsPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
+import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { goalsPage, homePage, subscriptionsPage, transactionPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 export const PAGE_SIZE = 50;
@@ -24,6 +24,10 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  transaction: {
+    get: (id: string) => Promise<TransactionDetail | undefined>;
+    reopen: (id: string) => Promise<void>;
   };
   subscriptions: {
     list: () => Promise<SubscriptionList>;
@@ -279,6 +283,47 @@ export function createApp(deps: AppDeps): Hono {
       throw error;
     }
     return c.redirect(`/revisar?duplicado=${decision === "duplicado" ? "descartado" : "mantido"}`, 303);
+  });
+
+  // ---------- Um lançamento ----------
+  const showTransaction = async (c: Context, id: string, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
+    const t = await deps.transaction.get(id);
+    if (!t) return c.text("Lançamento não encontrado.", 404);
+    return c.html(transactionPage({ t, categories: await deps.review.categories(), ...flash }), status);
+  };
+
+  app.get("/lancamentos/:id", (c) => {
+    const ok = c.req.query("ok");
+    const outros = Number(c.req.query("outros") ?? 0);
+    const message =
+      ok === "salvo" ? "Categoria salva." :
+      ok === "regra" ? `Categoria salva e regra criada${outros > 0 ? `; ${outros} outro(s) lançamento(s) ganharam sugestão` : ""}.` :
+      ok === "revisar" ? "Voltou para a revisão, com a sugestão automática." : undefined;
+    return showTransaction(c, c.req.param("id"), { message });
+  });
+
+  app.post("/lancamentos/:id", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
+    const id = c.req.param("id");
+    if (!/^\d{1,18}$/.test(id)) return c.text("Lançamento inválido.", 404);
+    const form = await c.req.parseBody();
+    const categoryId = Number(form.categoria);
+    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return showTransaction(c, id, { error: "Escolha uma categoria." }, 400);
+    const wantsRule = form.criar_regra === "1";
+    try {
+      const result = await deps.review.setCategory(id, categoryId, wantsRule ? { rulePattern: typeof form.regra === "string" ? form.regra : "" } : {});
+      return c.redirect(`/lancamentos/${id}?ok=${result.ruleCreated ? "regra" : "salvo"}&outros=${result.otherChanged}`, 303);
+    } catch (error) {
+      if (error instanceof CategoryError) return showTransaction(c, id, { error: error.message }, 400);
+      throw error;
+    }
+  });
+
+  app.post("/lancamentos/:id/revisar", bodyLimit({ maxSize: 1024 }), async (c) => {
+    const id = c.req.param("id");
+    if (!/^\d{1,18}$/.test(id)) return c.text("Lançamento inválido.", 404);
+    if (!(await deps.transaction.get(id))) return c.text("Lançamento não encontrado.", 404);
+    await deps.transaction.reopen(id);
+    return c.redirect(`/lancamentos/${id}?ok=revisar`, 303);
   });
 
   // ---------- Assinaturas ----------

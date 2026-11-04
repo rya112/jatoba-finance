@@ -1,4 +1,4 @@
-import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Subscription, type SubscriptionList, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Subscription, type SubscriptionList, type TransactionDetail, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -128,6 +128,9 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .historico { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.25rem; font-size: 0.95rem; }
   .historico li { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
   .historico form { display: inline; }
+  a.discreta { color: inherit; text-decoration: none; }
+  a.discreta:hover, a.discreta:focus-visible { text-decoration: underline; }
+  table.detalhes th { width: 12rem; font-weight: 500; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -277,7 +280,7 @@ export function transactionsPage(
         .join("");
       return `<tr>
         <td class="data">${brDate(r.date)}</td>
-        <td>${escapeHtml(r.cleanDescription ?? r.description)}${tags}</td>
+        <td><a class="discreta" href="/lancamentos/${escapeHtml(r.id)}">${escapeHtml(r.cleanDescription ?? r.description)}</a>${tags}</td>
         <td class="suave">${r.categoryName ? escapeHtml(r.categoryName) + (r.reviewed ? "" : ' <span class="etiqueta">sugerida</span>') : "—"}</td>
         <td class="suave">${escapeHtml(r.accountName)}</td>
         <td class="valor${r.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(r.amount, "pt-BR", r.currency))}</td>
@@ -830,5 +833,64 @@ export function subscriptionsPage(opts: { list: SubscriptionList; today: string;
   ${stopped}
   ${ignored}`,
     { section: "assinaturas", wide: true },
+  );
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  manual: "escolhida por você",
+  regra: "sugerida por regra",
+  banco: "sugerida pela categoria do banco",
+  estorno: "igual à da compra estornada",
+};
+
+export function transactionPage(opts: { t: TransactionDetail; categories: Category[]; message?: string; error?: string }): string {
+  const { t } = opts;
+  const flash = [
+    opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
+    opts.error ? `<div class="painel"><p class="erro" role="alert">${escapeHtml(opts.error)}</p></div>` : "",
+  ].join("");
+  const clean = t.cleanDescription ?? t.description;
+  const row = (label: string, value: string) => `<tr><th scope="row">${label}</th><td>${value}</td></tr>`;
+  const details = [
+    row("Data", brDate(t.date)),
+    row("Valor", `<span class="${t.amount > 0 ? "entrada" : ""}">${escapeHtml(formatMoney(t.amount, "pt-BR", t.currency))}</span>`),
+    t.foreign ? row("Valor original", `${escapeHtml(formatMoney(t.foreign.amount, "pt-BR", t.foreign.currency || "USD"))}${t.foreign.rate ? ` · cotação ${escapeHtml(t.foreign.rate)}` : ""}`) : "",
+    row("Conta", `${escapeHtml(t.accountName)}${t.cardLast4 ? ` · cartão final ${escapeHtml(t.cardLast4)}` : ""}`),
+    row("Mês", `${escapeHtml(monthTitle(t.month))}${t.billing ? " (vencimento da fatura)" : ""}`),
+    t.installment ? row("Parcela", escapeHtml(t.installment)) : "",
+    row("Descrição original", escapeHtml(t.description)),
+    t.bankCategory ? row("Categoria do banco", escapeHtml(t.bankCategory)) : "",
+    row("Categoria", t.categoryName
+      ? `${escapeHtml(t.categoryName)} <span class="suave">· ${SOURCE_LABEL[t.categorySource ?? ""] ?? ""}${t.rulePattern ? ` “${escapeHtml(t.rulePattern)}”` : ""}${t.reviewed ? " · revisado" : " · ainda não revisado"}</span>`
+      : `<span class="suave">sem categoria${t.reviewed ? "" : " · ainda não revisado"}</span>`),
+    t.goalName ? row("Meta", escapeHtml(t.goalName)) : "",
+    row("Veio de", `${escapeHtml(t.fileName)} <span class="suave">· importado em ${t.importedAt.toLocaleDateString("pt-BR")}</span>`),
+  ].join("");
+
+  const duplicateNote = t.duplicateOf
+    ? `<div class="painel"><p>Este lançamento foi marcado como <strong>cópia</strong> de <a href="/lancamentos/${escapeHtml(t.duplicateOf)}">outro</a> e não entra em listas nem somas.</p></div>`
+    : t.suspectOf
+      ? `<div class="painel"><p>Possível duplicado de <a href="/lancamentos/${escapeHtml(t.suspectOf)}">outro lançamento</a>. Decida em <a href="/revisar">Revisar</a>.</p></div>`
+      : "";
+
+  const edit = t.duplicateOf
+    ? ""
+    : `<h2>Categoria</h2>
+  <form class="linha-form" method="post" action="/lancamentos/${escapeHtml(t.id)}">
+    ${categorySelect(opts.categories, t.categoryId)}
+    <button type="submit">Salvar</button>
+    <label class="regra"><input type="checkbox" name="criar_regra" value="1"> Usar sempre que a descrição contiver
+      <input type="text" name="regra" value="${escapeHtml(normalizeText(clean))}" aria-label="Texto da regra"></label>
+  </form>
+  ${t.reviewed ? `<form class="linha-form" method="post" action="/lancamentos/${escapeHtml(t.id)}/revisar"><button class="discreto" type="submit">Voltar para revisão</button>
+    <span class="suave">Desfaz a escolha e devolve o lançamento para Revisar, com a sugestão automática.</span></form>` : ""}`;
+
+  return layout(
+    "Lançamento · Jatobá Finance",
+    `  <p><a href="/lancamentos?mes=${t.month.slice(0, 7)}">‹ Lançamentos de ${escapeHtml(monthTitle(t.month))}</a></p>
+  <h1>${escapeHtml(clean)}</h1>${flash}${duplicateNote}
+  <div class="tabela"><table class="detalhes"><tbody>${details}</tbody></table></div>
+  ${edit}`,
+    { section: "lancamentos" },
   );
 }

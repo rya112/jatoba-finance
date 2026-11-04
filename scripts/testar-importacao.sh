@@ -128,6 +128,17 @@ check "progresso: R\$ 1.500 do aporte + R\$ 500" "$(sql "select sum(amount) from
 curl -s -b "$JAR" "$URL/metas" > "$TMP/metas.html"
 grep -qF "20% · faltam" "$TMP/metas.html" && ok "página mostra 20% e quanto falta" || fail "progresso não aparece: $(grep -o '[0-9]*% · faltam[^<]*' "$TMP/metas.html" | head -2)"
 
+echo "== Editar depois de revisado"
+TXID="$(sql "select id from transactions where description = 'MERCADO EXEMPLO'")"
+check "lançamento está revisado" "$(sql "select reviewed from transactions where id = $TXID")" "t"
+has "/lancamentos/$TXID" "Voltar para revisão" && ok "página do lançamento abre" || fail "página do lançamento"
+has "/lancamentos" "/lancamentos/$TXID" && ok "lista liga ao lançamento" || fail "lista sem link"
+OUTROS2="$(sql "select id from categories where name = 'Outros'")"
+check "trocar categoria de revisado" "$(form "/lancamentos/$TXID" "categoria=$OUTROS2")" "303"
+check "categoria trocada" "$(sql "select c.name from transactions t join categories c on c.id = t.category_id where t.id = $TXID")" "Outros"
+check "voltar para revisão" "$(form "/lancamentos/$TXID/revisar" "")" "303"
+check "sugestão do C6 restaurada" "$(sql "select c.name || ' ' || t.reviewed from transactions t join categories c on c.id = t.category_id where t.id = $TXID")" "Supermercado false"
+
 echo "== Assinaturas"
 # O cartão fictício cobra STREAMING EXEMPLO em 14/09 e 14/10; a LOJA EXEMPLO é parcela e não conta.
 has "/assinaturas" "<h1>Assinaturas</h1>" && ok "página Assinaturas abre" || fail "Assinaturas não abriu"

@@ -103,3 +103,4 @@ export {
   type SubscriptionCharge,
   type SubscriptionList,
 } from "./subscriptions.js";
+export { getTransaction, reopenReview, type TransactionDetail } from "./transaction.js";
