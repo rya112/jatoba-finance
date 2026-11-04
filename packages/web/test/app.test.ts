@@ -368,48 +368,12 @@ describe("revisar", () => {
     expect(html).toContain("Escolha a categoria");
   });
 
-  it("salva a categoria e volta para a revisão", async () => {
-    const { app, cookie } = await loggedIn();
-    const res = await post(app, "/revisar/10", cookie, [["categoria", "1"], ["regra", "MERCADO"]]);
-    expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/revisar?salvo=1&outros=0");
-    expect(review.calls.set).toEqual([["10", 1, {}]]);
-  });
-
-  it("com “usar sempre”, cria a regra e conta os parecidos", async () => {
-    const { app, cookie } = await loggedIn();
-    const res = await post(app, "/revisar/10", cookie, [["categoria", "1"], ["criar_regra", "1"], ["regra", "MERCADO"]]);
-    expect(res.headers.get("location")).toBe("/revisar?salvo=regra&outros=4");
-    expect(review.calls.set).toEqual([["10", 1, { rulePattern: "MERCADO" }]]);
-    const html = await (await app.request(res.headers.get("location")!, { headers: { Cookie: cookie } })).text();
-    expect(html).toContain("Categoria salva e regra criada; 4 outro(s) lançamento(s) ganharam sugestão.");
-  });
-
-  it("regra curta demais mostra o erro na página", async () => {
-    const { app, cookie } = await loggedIn();
-    const res = await post(app, "/revisar/10", cookie, [["categoria", "1"], ["criar_regra", "1"], ["regra", "ab"]]);
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain("pelo menos 3 letras");
-  });
-
-  it("recusa categoria vazia e id inválido", async () => {
-    const { app, cookie } = await loggedIn();
-    expect((await post(app, "/revisar/10", cookie, [["categoria", ""]])).status).toBe(400);
-    expect((await post(app, "/revisar/abc", cookie, [["categoria", "1"]])).status).toBe(404);
-    expect(review.calls.set).toEqual([]);
-  });
-
-  it("aprova em lote só ids numéricos", async () => {
-    const { app, cookie } = await loggedIn();
-    const res = await post(app, "/revisar/aprovar", cookie, [["id", "11"], ["id", "12"], ["id", "1; drop table"]]);
-    expect(res.headers.get("location")).toBe("/revisar?aprovados=2");
-    expect(review.calls.approve).toEqual([["11", "12"]]);
-  });
+  // Salvar, criar regra, erros e ids inválidos: em review-batch.test.ts (rota /revisar/lote).
 
   it("formulário vindo de outro site é bloqueado (CSRF)", async () => {
     const { app, cookie } = await loggedIn();
-    expect((await post(app, "/revisar/10", cookie, [["categoria", "1"]], "https://site-malicioso.example")).status).toBe(403);
-    expect((await post(app, "/revisar/aprovar", cookie, [["id", "11"]], "https://site-malicioso.example")).status).toBe(403);
+    const fields: [string, string][] = [["id", "10"], ["categoria_10", "1"], ["acao", "todos"]];
+    expect((await post(app, "/revisar/lote", cookie, fields, "https://site-malicioso.example")).status).toBe(403);
     expect(review.calls.set).toEqual([]);
     expect(review.calls.approve).toEqual([]);
   });

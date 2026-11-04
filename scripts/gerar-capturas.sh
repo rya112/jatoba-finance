@@ -87,7 +87,6 @@ ok "metas de exemplo"
 
 # ---------- páginas ----------
 save() { curl -s -b "$JAR" "$URL$2" > "$PAGES/$1.html"; }
-curl -s "$URL/entrar" > "$PAGES/entrar.html"
 save inicio "/"
 save mes "/mes?m=2026-10"
 save revisar "/revisar"
@@ -117,7 +116,6 @@ shoot() { # nome largura altura [escuro]
   for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$png" ] && break; sleep 1; done
   [ -s "$png" ] && ok "tela-$1${4:+-$4}.png" || fail "não consegui gerar tela-$1"
 }
-shoot entrar 1280 720
 shoot mes 1280 1500
 shoot mes 1280 1500 escuro
 shoot revisar 1280 1300

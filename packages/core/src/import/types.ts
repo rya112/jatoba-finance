@@ -49,9 +49,3 @@ export interface ImportResult {
   /** Linhas ignoradas e outras observações, sem valores. */
   warnings: string[];
 }
-
-/** Menor e maior data dos lançamentos, que é o período real do extrato. */
-export function transactionRange(statement: Statement): { first?: string; last?: string } {
-  const dates = statement.transactions.map((t) => t.date).sort();
-  return { first: dates[0], last: dates.at(-1) };
-}

@@ -1,7 +1,7 @@
 import type { BackupStatus } from "./scheduler.js";
 import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Subscription, type SubscriptionList, type TransactionDetail, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
-export function escapeHtml(value: string): string {
+function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
@@ -154,7 +154,7 @@ ${opts.section ? "" : '  <img class="anel" src="/icone.svg" alt="" width="56" he
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 /** "2026-11-01" → "nov/2026". */
-export function monthLabel(iso: string): string {
+function monthLabel(iso: string): string {
   return `${MONTHS[Number(iso.slice(5, 7)) - 1]}/${iso.slice(0, 4)}`;
 }
 
@@ -480,7 +480,7 @@ export function reviewPage(opts: {
 const MONTH_NAMES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 /** "2026-11-01" → "novembro de 2026". */
-export function monthTitle(iso: string): string {
+function monthTitle(iso: string): string {
   return `${MONTH_NAMES[Number(iso.slice(5, 7)) - 1]} de ${iso.slice(0, 4)}`;
 }
 
@@ -951,7 +951,7 @@ function sizeLabel(bytes: number): string {
 }
 
 /** Seção de backups dos Ajustes. `now` para calcular há quanto tempo foi o último. */
-export function backupSection(b: BackupStatus | undefined, now: Date): string {
+function backupSection(b: BackupStatus | undefined, now: Date): string {
   if (!b) return "";
   if (!b.configured) {
     return `<h2>Backups</h2>

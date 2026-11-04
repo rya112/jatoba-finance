@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 
 export const EXAMPLE_PASSWORD = "troque-por-uma-frase-longa-e-unica";
-export const MIN_PASSWORD_LENGTH = 14;
+const MIN_PASSWORD_LENGTH = 14;
 
 /** Variáveis que também podem vir de um arquivo (Docker secrets), via <NOME>_FILE. */
 const FILE_VARIABLES = [

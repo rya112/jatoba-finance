@@ -164,7 +164,7 @@ export async function listCategories(sql: Sql): Promise<Category[]> {
   return sql<Category[]>`select id, name, kind from categories order by position, name`;
 }
 
-export async function listRules(sql: Sql): Promise<Rule[]> {
+async function listRules(sql: Sql): Promise<Rule[]> {
   const rows = await sql<{ id: number; pattern: string; direction: Direction | null; account_kind: AccountKind | null; category_id: number; origin: Rule["origin"] }[]>`
     select id, pattern, direction, account_kind, category_id, origin from rules
   `;

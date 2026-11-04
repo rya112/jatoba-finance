@@ -159,7 +159,7 @@ export const C6_FATURA: CsvLayout = {
   },
 };
 
-export const CSV_LAYOUTS: readonly CsvLayout[] = [C6_FATURA];
+const CSV_LAYOUTS: readonly CsvLayout[] = [C6_FATURA];
 
 function headerIndex(header: string[], name: string): number {
   const wanted = normalizeHeader(name);

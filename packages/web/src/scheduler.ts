@@ -8,7 +8,7 @@ import { createBackup, listBackups } from "./backup.js";
  * nunca apaga backups manuais nem os feitos antes de migrações e restaurações.
  */
 
-export const DAILY_REASON = "diario";
+const DAILY_REASON = "diario";
 const NAME = /^jatoba-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-([a-z0-9-]+)\.sql\.age$/;
 
 /** Data (UTC) e motivo gravados no nome do arquivo. */

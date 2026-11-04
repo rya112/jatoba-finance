@@ -10,7 +10,7 @@ import { ICON_SVG } from "./icone.js";
 import { goalsPage, homePage, subscriptionsPage, transactionPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
-export const PAGE_SIZE = 50;
+const PAGE_SIZE = 50;
 
 export interface AppDeps {
   version: string;
@@ -253,9 +253,7 @@ export function createApp(deps: AppDeps): Hono {
   };
 
   app.get("/revisar", (c) => {
-    const salvo = c.req.query("salvo");
     const outros = Number(c.req.query("outros") ?? 0);
-    const aprovados = c.req.query("aprovados");
     const duplicado = c.req.query("duplicado");
     const lote = c.req.query("lote");
     const regras = Number(c.req.query("regras") ?? 0);
@@ -269,19 +267,7 @@ export function createApp(deps: AppDeps): Hono {
       message = `${n} lançamento(s) salvo(s)${regras > 0 ? `, ${regras} regra(s) criada(s)` : ""}${outros > 0 ? `; ${outros} outro(s) ganharam sugestão` : ""}.`;
     } else if (duplicado === "descartado") message = "Duplicado descartado. Ele não aparece mais e não volta em novas importações.";
     else if (duplicado === "mantido") message = "Mantidos os dois lançamentos.";
-    else if (aprovados !== undefined) message = `${Number(aprovados) || 0} sugestão(ões) aprovada(s).`;
-    else if (salvo === "regra") message = `Categoria salva e regra criada${outros > 0 ? `; ${outros} outro(s) lançamento(s) ganharam sugestão` : ""}.`;
-    else if (salvo !== undefined) message = "Categoria salva.";
     return showReview(c, { message });
-  });
-
-  app.post("/revisar/aprovar", bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
-    const form = await c.req.parseBody({ all: true });
-    const raw = form.id;
-    const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
-    const ids = values.filter((v): v is string => typeof v === "string" && /^\d+$/.test(v));
-    const approved = await deps.review.approve(ids);
-    return c.redirect(`/revisar?aprovados=${approved}`, 303);
   });
 
   /**
@@ -339,22 +325,6 @@ export function createApp(deps: AppDeps): Hono {
     }
   });
 
-  app.post("/revisar/:id", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
-    const id = c.req.param("id");
-    if (!/^\d+$/.test(id)) return c.text("Lançamento inválido.", 404);
-    const form = await c.req.parseBody();
-    const categoryId = Number(form.categoria);
-    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return showReview(c, { error: "Escolha uma categoria." }, 400);
-    const wantsRule = form.criar_regra === "1";
-    const pattern = typeof form.regra === "string" ? form.regra : "";
-    try {
-      const result = await deps.review.setCategory(id, categoryId, wantsRule ? { rulePattern: pattern } : {});
-      return c.redirect(`/revisar?salvo=${result.ruleCreated ? "regra" : "1"}&outros=${result.otherChanged}`, 303);
-    } catch (error) {
-      if (error instanceof CategoryError) return showReview(c, { error: error.message }, 400);
-      throw error;
-    }
-  });
 
   app.post("/duplicados/:id", bodyLimit({ maxSize: 1024 }), async (c) => {
     const id = c.req.param("id");

@@ -14,7 +14,7 @@ import type { Sql } from "./db.js";
  * é só uma sugestão: vale depois que você aprova na Revisar.
  */
 
-export const DEFAULT_AI_MODEL = "claude-haiku-5-5";
+const DEFAULT_AI_MODEL = "claude-haiku-5-5";
 const BATCH = 60;
 const NONE = "nenhuma";
 

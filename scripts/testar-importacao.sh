@@ -85,7 +85,7 @@ grep -q "pela regra “FATURA”" "$TMP/revisar.html" && ok "mostra a origem da 
 POSTO_IDS="$(sql "select string_agg(id::text, ',' order by id) from transactions where description = 'POSTO EXEMPLO'")"
 FIRST="${POSTO_IDS%%,*}"
 TRANSPORTE="$(sql "select id from categories where name = 'Transporte'")"
-CODE="$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "categoria=$TRANSPORTE&criar_regra=1&regra=POSTO+EXEMPLO" "$URL/revisar/$FIRST")"
+CODE="$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "id=$FIRST&so=$FIRST&categoria_$FIRST=$TRANSPORTE&criar_regra_$FIRST=1&regra_$FIRST=POSTO+EXEMPLO" "$URL/revisar/lote")"
 check "salvar categoria com regra" "$CODE" "303"
 check "lançamento ficou manual e revisado" "$(sql "select category_source || ' ' || reviewed from transactions where id = $FIRST")" "manual true"
 check "regra do usuário criada" "$(sql "select count(*) from rules where origin = 'usuario' and pattern = 'POSTO EXEMPLO'")" "1"
@@ -93,10 +93,10 @@ check "nenhum POSTO ficou sem categoria" "$(sql "select count(*) from transactio
 
 PENDING_BEFORE="$(sql "select count(*) from transactions where not reviewed")"
 SUGGESTED="$(sql "select count(*) from transactions where not reviewed and category_id is not null")"
-IDS="$(sql "select string_agg('id=' || id, '&') from transactions where not reviewed and category_id is not null")"
-check "aprovar em lote" "$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$IDS" "$URL/revisar/aprovar")" "303"
+IDS="$(sql "select string_agg('id=' || id || '&sugestao_' || id || '=' || category_id || '&categoria_' || id || '=' || category_id, '&') from transactions where not reviewed and category_id is not null")"
+check "aprovar em lote" "$(curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$IDS&acao=todos" "$URL/revisar/lote")" "303"
 check "aprovou só os com sugestão" "$(sql "select count(*) from transactions where not reviewed")" "$((PENDING_BEFORE - SUGGESTED))"
-check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: https://malicioso.example' -o "$TMP/descarte" -w '%{http_code}' --data "id=1" "$URL/revisar/aprovar")" "403"
+check "aprovação de outro site bloqueada" "$(curl -s -b "$JAR" -H 'Origin: https://malicioso.example' -o "$TMP/descarte" -w '%{http_code}' --data "id=1&categoria_1=1&acao=todos" "$URL/revisar/lote")" "403"
 
 echo "== Ajustes"
 form() { curl -s -b "$JAR" -H "Origin: $URL" -o "$TMP/descarte" -w '%{http_code}' --data "$2" "$URL$1"; }

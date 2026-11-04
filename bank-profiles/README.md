@@ -8,7 +8,7 @@ Cada banco ou cartão ganha um arquivo que ensina o Jatobá a ler o extrato dele
 - regras de categoria do sistema: migração `0004_categories`; categorias do banco mapeadas: `BANK_CATEGORY_MAP` em `packages/core/src/categories.ts`;
 - limpeza de descrições: `cleanDescription` no mesmo arquivo.
 
-O formato em YAML de `exemplo.yaml` fica como proposta para quando outras pessoas quiserem contribuir com bancos sem mexer em código.
+Para ensinar um banco novo, siga o C6 como modelo: um layout em `CSV_LAYOUTS` (ou nada, se o banco exporta OFX), extratos fictícios em `packages/core/test/fixtures/` e testes.
 
 **Nunca use dados reais** para criar ou testar um perfil: recrie os casos com valores inventados em `packages/core/test/fixtures/`.
 
