@@ -38,6 +38,7 @@ async function setup() {
     },
     month: { months: empty, summary: async () => { throw new Error("sem meses"); } },
     settings: { categories: empty, rules: empty, accounts: empty, createCategory: async () => 1, updateCategory: async () => {}, deleteCategory: async () => 0, createRule: async () => 0, updateRule: async () => 0, deleteRule: async () => 0, renameAccount: async () => {} },
+    backups: { status: async () => ({ configured: true, daily: true, hour: 3, keep: 14, count: 1, last: { name: "b", date: new Date(), reason: "diario", bytes: 2048 } }), runNow: async () => "b" },
     transaction: {
       get: async (id) => (id === tx.id ? tx : undefined),
       reopen: async (id) => void calls.push(["reopen", id]),

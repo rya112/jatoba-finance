@@ -13,6 +13,9 @@ echo "$KEYS" | grep -o 'AGE-SECRET-KEY-[0-9A-Z]*' > "$TMP/chave.txt"
 dc run --rm --no-deps -T app jatoba keygen | grep -o 'AGE-SECRET-KEY-[0-9A-Z]*' > "$TMP/chave-errada.txt"
 
 echo "JATOBA_BACKUP_RECIPIENT=$PUBLIC" >> "$TMP/teste.env"
+# Backup diário a partir da meia-noite: assim ele roda logo no primeiro minuto depois de subir.
+echo "JATOBA_BACKUP_HOUR=0" >> "$TMP/teste.env"
+echo "JATOBA_BACKUP_KEEP=3" >> "$TMP/teste.env"
 
 dc up -d >/dev/null 2>&1
 wait_healthy
@@ -83,6 +86,27 @@ wait_healthy
 dc logs --no-log-prefix app | grep -q "Backup antes das migrações" && ok "backup automático feito na partida" || fail "sem backup automático"
 check "migração reaplicada" "$(sql "select count(*) from schema_migrations where id = '0001_sessions'")" "1"
 ls "$TMP/backups" | grep -q antes-migracao && ok "arquivo antes-migracao na pasta" || fail "arquivo antes-migracao"
+
+echo "== Backup diário automático"
+until=$((SECONDS + ${JATOBA_TESTE_ESPERA_DIARIO:-180}))
+while [ "$SECONDS" -lt "$until" ] && ! ls "$TMP/backups" | grep -q -- "-diario.sql.age"; do sleep 5; done
+DAILY="$(ls "$TMP/backups" | grep -- "-diario.sql.age" | head -1 || true)"
+[ -n "$DAILY" ] && ok "backup diário criado sozinho: $DAILY" || fail "backup diário não apareceu"
+check "backup diário criptografado" "$(head -c 21 "$TMP/backups/$DAILY")" "age-encryption.org/v1"
+dc logs --no-log-prefix app | grep -q "Backup diário criado" && ok "log registra o backup diário" || fail "sem log do backup diário"
+sleep 15
+check "só um diário por dia" "$(ls "$TMP/backups" | grep -c -- "-diario.sql.age")" "1"
+
+echo "== Backup pela página"
+JAR="$TMP/cookies.txt"
+U="$(grep '^JATOBA_ADMIN_USER=' "$TMP/teste.env" | cut -d= -f2)"
+P="$(grep '^JATOBA_ADMIN_PASSWORD=' "$TMP/teste.env" | cut -d= -f2)"
+check "login" "$(curl -s -c "$JAR" -o "$TMP/descarte" -w '%{http_code}' -H "Origin: $URL" --data-urlencode "usuario=$U" --data-urlencode "senha=$P" "$URL/entrar")" "303"
+BEFORE="$(ls "$TMP/backups" | grep -c -- "-manual.sql.age")"
+check "“Fazer backup agora”" "$(curl -s -b "$JAR" -o "$TMP/descarte" -w '%{http_code}' -H "Origin: $URL" -X POST "$URL/ajustes/backup")" "303"
+check "backup manual criado" "$(ls "$TMP/backups" | grep -c -- "-manual.sql.age")" "$((BEFORE + 1))"
+curl -s -b "$JAR" "$URL/ajustes" > "$TMP/ajustes.html"
+grep -qF "Automático todo dia a partir das 00h" "$TMP/ajustes.html" && ok "Ajustes mostra a situação dos backups" || fail "Ajustes sem situação dos backups"
 
 echo
 echo "Todos os $PASS testes de backup passaram."

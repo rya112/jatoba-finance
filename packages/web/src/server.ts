@@ -50,6 +50,7 @@ import {
   type Config,
 } from "@jatoba/core";
 import { createBackup } from "./backup.js";
+import { backupStatus, startScheduler } from "./scheduler.js";
 import { createApp } from "./app.js";
 import { Credentials, LoginLimiter, PgSessionStore } from "./auth.js";
 import { VERSION } from "./version.js";
@@ -124,6 +125,24 @@ setInterval(() => void sessions.purgeExpired().catch(() => {}), 6 * 60 * 60_000)
 const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: config.TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 const today = () => dayFormat.format(new Date());
 
+const backupConfig = {
+  dir: config.JATOBA_BACKUP_DIR,
+  daily: config.JATOBA_BACKUP_DAILY === "true",
+  hour: config.JATOBA_BACKUP_HOUR,
+  keep: config.JATOBA_BACKUP_KEEP,
+};
+const scheduler = startScheduler({
+  ...backupConfig,
+  databaseUrl: config.DATABASE_URL,
+  recipient: config.JATOBA_BACKUP_RECIPIENT,
+  timeZone: config.TZ,
+});
+if (backupConfig.daily && config.JATOBA_BACKUP_RECIPIENT) {
+  console.log(`Backup diário ligado: a partir das ${backupConfig.hour}h (${config.TZ}), guardando ${backupConfig.keep}.`);
+} else if (!config.JATOBA_BACKUP_RECIPIENT) {
+  console.warn("Aviso: JATOBA_BACKUP_RECIPIENT não está no .env; não há backup automático.");
+}
+
 const app = createApp({
   version: VERSION,
   credentials: await Credentials.create(config.JATOBA_ADMIN_USER, config.JATOBA_ADMIN_PASSWORD),
@@ -136,6 +155,14 @@ const app = createApp({
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
+  },
+  backups: {
+    status: () => backupStatus({ ...backupConfig, configured: Boolean(config.JATOBA_BACKUP_RECIPIENT) }),
+    runNow: async () => {
+      if (!config.JATOBA_BACKUP_RECIPIENT) throw new Error("JATOBA_BACKUP_RECIPIENT não está no .env (veja docs/backup.md).");
+      const file = await createBackup({ databaseUrl: config.DATABASE_URL, recipient: config.JATOBA_BACKUP_RECIPIENT, dir: config.JATOBA_BACKUP_DIR, reason: "manual" });
+      return basename(file);
+    },
   },
   transaction: {
     get: (id) => getTransaction(sql, id),
@@ -192,6 +219,7 @@ const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" 
 });
 
 const shutdown = () => {
+  scheduler.stop();
   server.close();
   void sql.end({ timeout: 5 }).finally(() => process.exit(0));
 };

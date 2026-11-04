@@ -36,6 +36,7 @@ O arquivo aparece em `backups/`, com nome do tipo `jatoba-20261103-091530-manual
 
 Backups automáticos:
 
+- **todo dia**, a partir das 3h (ou assim que o computador ligar depois disso), guardando os 14 mais recentes (`...-diario.sql.age`). Ajuste no `.env` com `JATOBA_BACKUP_HOUR`, `JATOBA_BACKUP_KEEP` ou desligue com `JATOBA_BACKUP_DAILY=false`. A situação aparece em **Ajustes → Backups**, que também tem o botão **Fazer backup agora**;
 - **antes de cada migração do banco**, na partida de uma versão nova (`...-antes-migracao.sql.age`);
 - **antes de cada restauração**, com o estado que vai ser substituído (`...-antes-restauracao.sql.age`).
 

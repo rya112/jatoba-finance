@@ -5,6 +5,7 @@ import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
 import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import type { BackupStatus } from "./scheduler.js";
 import { goalsPage, homePage, subscriptionsPage, transactionPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
@@ -24,6 +25,11 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  backups: {
+    status: () => Promise<BackupStatus>;
+    /** Backup manual agora; devolve o nome do arquivo. */
+    runNow: () => Promise<string>;
   };
   transaction: {
     get: (id: string) => Promise<TransactionDetail | undefined>;
@@ -165,8 +171,9 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   app.get("/", async (c) => {
-    const [count, review, suspects] = await Promise.all([deps.ledger.count(), deps.review.list({ limit: 1 }), deps.review.suspects()]);
-    return c.html(homePage(deps.version, count, review.total + suspects.length));
+    const [count, review, suspects, backup] = await Promise.all([deps.ledger.count(), deps.review.list({ limit: 1 }), deps.review.suspects(), deps.backups.status()]);
+    const lastDays = backup.last ? Math.floor((Date.now() - backup.last.date.getTime()) / (24 * 60 * 60_000)) : undefined;
+    return c.html(homePage(deps.version, count, review.total + suspects.length, { configured: backup.configured, lastDays }));
   });
 
   app.get("/importar", (c) => c.html(importPage()));
@@ -437,11 +444,12 @@ export function createApp(deps: AppDeps): Hono {
     "regra-salva": "Regra salva.",
     "regra-apagada": "Regra apagada.",
     "conta-salva": "Conta renomeada.",
+    "backup-feito": "Backup criado.",
   };
 
   const showSettings = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
-    const [categories, rules, accounts] = await Promise.all([deps.settings.categories(), deps.settings.rules(), deps.settings.accounts()]);
-    return c.html(settingsPage({ categories, rules, accounts, ...flash }), status);
+    const [categories, rules, accounts, backup] = await Promise.all([deps.settings.categories(), deps.settings.rules(), deps.settings.accounts(), deps.backups.status()]);
+    return c.html(settingsPage({ categories, rules, accounts, backup, ...flash }), status);
   };
 
   app.get("/ajustes", (c) => {
@@ -504,6 +512,14 @@ export function createApp(deps: AppDeps): Hono {
     const n = await deps.settings.deleteRule(idParam(c));
     return `/ajustes?ok=regra-apagada&n=${n}`;
   }));
+  app.post("/ajustes/backup", bodyLimit({ maxSize: 1024 }), async (c) => {
+    try {
+      await deps.backups.runNow();
+    } catch (error) {
+      return showSettings(c, { error: `O backup falhou: ${(error as Error).message}` }, 400);
+    }
+    return c.redirect("/ajustes?ok=backup-feito", 303);
+  });
   app.post("/ajustes/contas/:id", limit, settingsAction(async (c, form) => {
     await deps.settings.renameAccount(idParam(c), text(form, "nome"));
     return "/ajustes?ok=conta-salva";

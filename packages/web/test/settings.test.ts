@@ -85,6 +85,7 @@ async function makeApp() {
       resolve: async () => {},
     },
     month: { months: empty, summary: async () => { throw new Error("sem meses"); } },
+    backups: { status: async () => ({ configured: true, daily: true, hour: 3, keep: 14, count: 1, last: { name: "b", date: new Date(), reason: "diario", bytes: 2048 } }), runNow: async () => "b" },
     transaction: { get: async () => undefined, reopen: async () => {} },
     subscriptions: { list: async () => ({ active: [], stopped: [], ignored: [], monthlyTotal: 0 }), ignore: async () => {}, unignore: async () => {} },
     goals: {

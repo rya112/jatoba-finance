@@ -40,6 +40,10 @@ const schema = z
       .regex(/^age1[02-9ac-hj-np-z]{58}$/, "precisa ser uma chave pública do age (começa com age1); gere com: docker compose run --rm --no-deps app jatoba keygen")
       .optional(),
     JATOBA_BACKUP_DIR: z.string().default("/backups"),
+    // Backup automático diário (precisa de JATOBA_BACKUP_RECIPIENT).
+    JATOBA_BACKUP_DAILY: z.enum(["true", "false"], { message: "use true ou false" }).default("true"),
+    JATOBA_BACKUP_HOUR: z.coerce.number().int().min(0, "de 0 a 23").max(23, "de 0 a 23").default(3),
+    JATOBA_BACKUP_KEEP: z.coerce.number().int().min(1, "guarde pelo menos 1").max(3650).default(14),
   })
   .superRefine((config, ctx) => {
     if (config.AI_PROVIDER === "anthropic" && !config.ANTHROPIC_API_KEY) {

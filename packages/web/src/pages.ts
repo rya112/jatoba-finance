@@ -1,3 +1,4 @@
+import type { BackupStatus } from "./scheduler.js";
 import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Subscription, type SubscriptionList, type TransactionDetail, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
@@ -156,11 +157,19 @@ function brDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-export function homePage(version: string, transactionCount: number, pendingReview = 0): string {
+export function homePage(version: string, transactionCount: number, pendingReview = 0, backup?: { configured: boolean; lastDays?: number }): string {
+  const backupWarning = !backup
+    ? ""
+    : !backup.configured
+      ? '<div class="painel"><p class="erro"><strong>Backup não configurado.</strong> Veja <a href="/ajustes">Ajustes → Backups</a>.</p></div>'
+      : backup.lastDays === undefined || backup.lastDays >= 7
+        ? `<div class="painel"><p class="erro"><strong>${backup.lastDays === undefined ? "Nenhum backup ainda" : `Último backup há ${backup.lastDays} dias`}.</strong> <a href="/ajustes">Fazer agora</a>.</p></div>`
+        : "";
   return layout(
     "Jatobá Finance",
     `  <h1>Jatobá Finance</h1>
   <p>Every resource has a purpose.</p>
+  ${backupWarning}
   ${
     transactionCount === 0
       ? `<p>Nenhum lançamento ainda. Comece <a href="/importar">importando um extrato</a> (OFX da conta ou CSV da fatura do C6).</p>`
@@ -569,6 +578,8 @@ export function settingsPage(opts: {
   categories: CategoryUsage[];
   rules: RuleDetail[];
   accounts: AccountInfo[];
+  backup?: BackupStatus;
+  now?: Date;
   message?: string;
   error?: string;
 }): string {
@@ -649,7 +660,8 @@ export function settingsPage(opts: {
   <ul class="lista-ajustes">${ruleItems}</ul>
 
   <h2>Contas</h2>
-  <ul class="lista-ajustes">${accountItems || '<li class="suave">Nenhuma conta ainda. Elas aparecem ao importar extratos.</li>'}</ul>`,
+  <ul class="lista-ajustes">${accountItems || '<li class="suave">Nenhuma conta ainda. Elas aparecem ao importar extratos.</li>'}</ul>
+  ${backupSection(opts.backup, opts.now ?? new Date())}`,
     { section: "ajustes", wide: true },
   );
 }
@@ -893,4 +905,29 @@ export function transactionPage(opts: { t: TransactionDetail; categories: Catego
   ${edit}`,
     { section: "lancamentos" },
   );
+}
+
+function sizeLabel(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Seção de backups dos Ajustes. `now` para calcular há quanto tempo foi o último. */
+export function backupSection(b: BackupStatus | undefined, now: Date): string {
+  if (!b) return "";
+  if (!b.configured) {
+    return `<h2>Backups</h2>
+  <div class="painel"><p class="erro"><strong>Backup não configurado.</strong> Sem ele, seus dados ficam só neste computador.</p>
+  <p>Siga os três passos de <code>docs/backup.md</code>: gerar as chaves, guardar a privada fora do computador e pôr a pública no <code>.env</code>.</p></div>`;
+  }
+  const days = b.last ? Math.floor((now.getTime() - b.last.date.getTime()) / (24 * 60 * 60_000)) : undefined;
+  const last = b.last
+    ? `Último: <strong>${b.last.date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong> (${escapeHtml(b.last.reason)}, ${sizeLabel(b.last.bytes)})${days !== undefined && days >= 7 ? ` <span class="pior">há ${days} dias</span>` : ""}`
+    : '<span class="pior">Nenhum backup ainda.</span>';
+  const daily = b.daily
+    ? `Automático todo dia a partir das ${String(b.hour).padStart(2, "0")}h (ou assim que o computador ligar), guardando os ${b.keep} diários mais recentes.`
+    : "Backup automático diário desligado (JATOBA_BACKUP_DAILY=false no .env).";
+  return `<h2>Backups</h2>
+  <p>${last} · ${b.count} arquivo(s) na pasta <code>backups/</code>.</p>
+  <p class="suave">${daily} Backups manuais e os feitos antes de migrações nunca são apagados. Copie alguns para fora deste computador de vez em quando.</p>
+  <form class="linha-form" method="post" action="/ajustes/backup"><button type="submit">Fazer backup agora</button></form>`;
 }
