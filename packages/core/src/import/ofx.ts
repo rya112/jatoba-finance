@@ -129,6 +129,18 @@ export function ofxDate(raw: string | undefined): string | undefined {
   return `${y}-${mo}-${d}`;
 }
 
+/**
+ * Parcela escrita no texto, como "LOJA PARC 03/10" ou "PARCELA 3 DE 10". Exige a palavra PARC,
+ * para não confundir com datas. Devolve undefined se não houver ou se for impossível.
+ */
+export function installmentFromText(text: string): { current: number; total: number } | undefined {
+  const m = text.toUpperCase().match(/\bPARC(?:ELA)?\.?\s*(\d{1,3})\s*(?:\/|DE)\s*(\d{1,3})\b/);
+  if (!m) return undefined;
+  const current = Number(m[1]);
+  const total = Number(m[2]);
+  return current >= 1 && total >= 2 && current <= total ? { current, total } : undefined;
+}
+
 function joinDescription(name?: string, memo?: string): string {
   const parts = [name, memo].map((p) => p?.replace(/\s+/g, " ").trim()).filter((p): p is string => !!p);
   if (parts.length === 2 && (parts[0]!.includes(parts[1]!) || parts[1]!.includes(parts[0]!))) {
@@ -161,12 +173,15 @@ function readStatement(node: OfxNode, kind: StatementKind, warnings: string[]): 
     }
     const name = field(trn, "NAME") ?? field(find(trn, "PAYEE"), "NAME");
     const memo = field(trn, "MEMO");
+    const description = joinDescription(name, memo);
+    const installment = installmentFromText(description);
     transactions.push({
       externalId: field(trn, "FITID"),
       date,
       amount,
       type: (field(trn, "TRNTYPE") ?? "OTHER").toUpperCase(),
-      description: joinDescription(name, memo),
+      description,
+      ...(installment ? { installment } : {}),
       name,
       memo,
       checkNumber: field(trn, "CHECKNUM"),

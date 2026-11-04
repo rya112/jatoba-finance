@@ -5,7 +5,7 @@ export { migrate, pendingMigrations, MigrationError } from "./migrate.js";
 export { MIGRATIONS, type Migration } from "./migrations/index.js";
 export type { ImportResult, Statement, StatementKind, Transaction } from "./import/types.js";
 export { transactionRange } from "./import/types.js";
-export { parseOfx, decodeOfx, ofxDate, OfxError, type OfxResult, type OfxStatement, type OfxTransaction } from "./import/ofx.js";
+export { parseOfx, decodeOfx, ofxDate, installmentFromText, OfxError, type OfxResult, type OfxStatement, type OfxTransaction } from "./import/ofx.js";
 export {
   parseCsvStatement,
   parseCsv,
@@ -92,3 +92,14 @@ export {
   type GoalStatus,
   type InvestmentTransaction,
 } from "./goals.js";
+export {
+  detectSubscriptions,
+  listSubscriptions,
+  ignoreSubscription,
+  unignoreSubscription,
+  merchantKey,
+  nextMonthSameDay,
+  type Subscription,
+  type SubscriptionCharge,
+  type SubscriptionList,
+} from "./subscriptions.js";

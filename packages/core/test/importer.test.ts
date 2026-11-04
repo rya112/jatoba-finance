@@ -143,3 +143,15 @@ describe.skipIf(!TEST_DATABASE_URL)("importFile no Postgres", () => {
     }
   });
 });
+
+describe("impressão digital e parcela no texto", () => {
+  it("OFX com PARC no texto: a impressão é a mesma de antes de o leitor reconhecer a parcela", () => {
+    const t = { date: "2026-10-20", amount: -19990, type: "DEBIT", description: "LOJA EXEMPLO PARC 04/10" };
+    expect(fingerprints([{ ...t, installment: { current: 4, total: 10 } }])).toEqual(fingerprints([t]));
+  });
+
+  it("CSV com parcela só na coluna: a parcela continua distinguindo (C6 repete a data)", () => {
+    const t = { date: "2026-09-03", amount: -15000, type: "OTHER", description: "CURSO EXEMPLO" };
+    expect(fingerprints([{ ...t, installment: { current: 1, total: 12 } }])).not.toEqual(fingerprints([{ ...t, installment: { current: 2, total: 12 } }]));
+  });
+});

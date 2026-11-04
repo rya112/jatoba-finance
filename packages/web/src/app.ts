@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
-import { goalsPage, homePage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
+import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { goalsPage, homePage, subscriptionsPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
 export const PAGE_SIZE = 50;
@@ -24,6 +24,11 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  subscriptions: {
+    list: () => Promise<SubscriptionList>;
+    ignore: (key: string, name: string) => Promise<void>;
+    unignore: (key: string) => Promise<void>;
   };
   goals: {
     /** Data de hoje (AAAA-MM-DD) no fuso de quem usa. */
@@ -274,6 +279,30 @@ export function createApp(deps: AppDeps): Hono {
       throw error;
     }
     return c.redirect(`/revisar?duplicado=${decision === "duplicado" ? "descartado" : "mantido"}`, 303);
+  });
+
+  // ---------- Assinaturas ----------
+  app.get("/assinaturas", async (c) => {
+    const ok = c.req.query("ok");
+    const message = ok === "ignorada" ? "Marcada como “não é assinatura”." : ok === "voltou" ? "Voltou a aparecer na lista." : undefined;
+    return c.html(subscriptionsPage({ list: await deps.subscriptions.list(), today: deps.goals.today(), message }));
+  });
+  const subscriptionKey = (form: Record<string, string | File>) => {
+    const key = typeof form.chave === "string" ? form.chave.trim() : "";
+    return /^[A-Z ]{3,120}$/.test(key) ? key : undefined;
+  };
+  app.post("/assinaturas/ignorar", bodyLimit({ maxSize: 4 * 1024 }), async (c) => {
+    const form = await c.req.parseBody();
+    const key = subscriptionKey(form);
+    if (!key) return c.text("Assinatura inválida.", 400);
+    await deps.subscriptions.ignore(key, typeof form.nome === "string" ? form.nome : key);
+    return c.redirect("/assinaturas?ok=ignorada", 303);
+  });
+  app.post("/assinaturas/voltar", bodyLimit({ maxSize: 4 * 1024 }), async (c) => {
+    const key = subscriptionKey(await c.req.parseBody());
+    if (!key) return c.text("Assinatura inválida.", 400);
+    await deps.subscriptions.unignore(key);
+    return c.redirect("/assinaturas?ok=voltou", 303);
   });
 
   // ---------- Metas ----------

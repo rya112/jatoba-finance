@@ -34,4 +34,5 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [x] Fase 3: tela do Mês e filtros em Lançamentos
 - [x] Fase 3: Ajustes (categorias, regras e contas)
 - [x] Fase 3: Metas
-- [ ] Fase 3: Assinaturas
+- [x] Fase 3: Assinaturas
+- [ ] Fase 3: critério de pronto — fechar um mês em menos de 20 minutos (com uso real)

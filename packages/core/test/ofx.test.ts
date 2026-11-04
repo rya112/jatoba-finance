@@ -129,3 +129,22 @@ describe("decodeOfx", () => {
     expect(decodeOfx(Buffer.from("<OFX>São", "latin1"))).toBe("<OFX>São");
   });
 });
+
+describe("parcela no texto do OFX", () => {
+  it("reconhece PARC e PARCELA, e não confunde com datas", async () => {
+    const { installmentFromText } = await import("../src/import/ofx.js");
+    expect(installmentFromText("LOJA EXEMPLO PARC 03/10")).toEqual({ current: 3, total: 10 });
+    expect(installmentFromText("LOJA PARCELA 2 DE 6")).toEqual({ current: 2, total: 6 });
+    expect(installmentFromText("Loja parc.4/12")).toEqual({ current: 4, total: 12 });
+    expect(installmentFromText("PAGAMENTO 03/10")).toBeUndefined();
+    expect(installmentFromText("PARC 11/10")).toBeUndefined();
+  });
+
+  it("o cartão fictício passa a ter as parcelas da LOJA EXEMPLO", () => {
+    const [cartao] = parseOfx(fixture("cartao-exemplo.ofx")).statements;
+    expect(cartao!.transactions.filter((t) => t.installment).map((t) => t.installment)).toEqual([
+      { current: 3, total: 10 },
+      { current: 4, total: 10 },
+    ]);
+  });
+});

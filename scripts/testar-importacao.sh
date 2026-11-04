@@ -128,6 +128,16 @@ check "progresso: R\$ 1.500 do aporte + R\$ 500" "$(sql "select sum(amount) from
 curl -s -b "$JAR" "$URL/metas" > "$TMP/metas.html"
 grep -qF "20% · faltam" "$TMP/metas.html" && ok "página mostra 20% e quanto falta" || fail "progresso não aparece: $(grep -o '[0-9]*% · faltam[^<]*' "$TMP/metas.html" | head -2)"
 
+echo "== Assinaturas"
+# O cartão fictício cobra STREAMING EXEMPLO em 14/09 e 14/10; a LOJA EXEMPLO é parcela e não conta.
+has "/assinaturas" "<h1>Assinaturas</h1>" && ok "página Assinaturas abre" || fail "Assinaturas não abriu"
+grep -qF "STREAMING EXEMPLO" "$TMP/pagina.html" && ok "encontra o streaming mensal" || fail "streaming não encontrado"
+grep -qF "14/11/2026" "$TMP/pagina.html" && ok "prevê a próxima cobrança em 14/11" || fail "sem próxima cobrança"
+if grep -qF "LOJA EXEMPLO" "$TMP/pagina.html"; then fail "parcela apareceu como assinatura"; else ok "parcelas ficam de fora"; fi
+check "marcar “não é assinatura”" "$(form /assinaturas/ignorar "chave=STREAMING+EXEMPLO&nome=Streaming")" "303"
+has "/assinaturas" "Voltar a mostrar" && ok "aparece entre as ignoradas" || fail "não foi para as ignoradas"
+check "voltar a mostrar" "$(form /assinaturas/voltar "chave=STREAMING+EXEMPLO")" "303"
+
 echo "== Mês"
 curl -s -b "$JAR" "$URL/mes" > "$TMP/mes.html"
 grep -q "Para onde foi o dinheiro" "$TMP/mes.html" && ok "página do Mês abre" || fail "Mês não abriu"

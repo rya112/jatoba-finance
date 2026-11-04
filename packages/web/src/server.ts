@@ -8,6 +8,9 @@ import {
   categorize,
   listCategories,
   listForReview,
+  listSubscriptions,
+  ignoreSubscription,
+  unignoreSubscription,
   listGoals,
   listGoalEntries,
   listUnassignedInvestments,
@@ -131,6 +134,11 @@ const app = createApp({
     importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
+  },
+  subscriptions: {
+    list: () => listSubscriptions(sql, today(), config.JATOBA_CURRENCY),
+    ignore: (key, name) => ignoreSubscription(sql, key, name),
+    unignore: (key) => unignoreSubscription(sql, key),
   },
   goals: {
     today,

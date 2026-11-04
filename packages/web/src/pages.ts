@@ -1,15 +1,16 @@
-import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { formatMoney, normalizeText, type AccountInfo, type GoalEntry, type GoalProgress, type InvestmentTransaction, type Subscription, type SubscriptionList, type Category, type CategoryUsage, type RuleDetail, type CategoryTotal, type MonthSummary, type ImportOutcome, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-type Section = "inicio" | "mes" | "metas" | "importar" | "revisar" | "lancamentos" | "ajustes";
+type Section = "inicio" | "mes" | "metas" | "assinaturas" | "importar" | "revisar" | "lancamentos" | "ajustes";
 
 const NAV: { id: Section; href: string; label: string }[] = [
   { id: "inicio", href: "/", label: "Início" },
   { id: "mes", href: "/mes", label: "Mês" },
   { id: "metas", href: "/metas", label: "Metas" },
+  { id: "assinaturas", href: "/assinaturas", label: "Assinaturas" },
   { id: "importar", href: "/importar", label: "Importar" },
   { id: "revisar", href: "/revisar", label: "Revisar" },
   { id: "lancamentos", href: "/lancamentos", label: "Lançamentos" },
@@ -770,5 +771,64 @@ export function goalsPage(opts: {
   ${investments}
   ${archived}`,
     { section: "metas", wide: true },
+  );
+}
+
+function subscriptionRow(s: Subscription, today: string): string {
+  const change = s.previousAmount !== undefined
+    ? ` <span class="${s.lastAmount > s.previousAmount ? "pior" : "melhor"}">${s.lastAmount > s.previousAmount ? "subiu" : "baixou"} de ${BRL(s.previousAmount)}</span>`
+    : "";
+  const next = s.active
+    ? s.late
+      ? `<span class="pior">prevista para ${brDate(s.nextDate)}, ainda não apareceu</span>`
+      : `próxima por volta de ${brDate(s.nextDate)}${s.nextDate < today ? ' <span class="suave">(importe o extrato mais recente para conferir)</span>' : ""}`
+    : `<span class="suave">sem cobrança desde ${brDate(s.lastDate)}</span>`;
+  return `<tr>
+    <td><strong>${escapeHtml(s.name)}</strong>${s.categoryName ? ` <span class="suave">· ${escapeHtml(s.categoryName)}</span>` : ""}${s.accountName ? ` <span class="suave">· ${escapeHtml(s.accountName)}</span>` : ""}
+      <div class="suave">${s.charges} cobrança(s) desde ${escapeHtml(monthTitle(`${s.firstDate.slice(0, 7)}-01`))}</div></td>
+    <td class="valor">${BRL(s.lastAmount)}${change}</td>
+    <td>${next}<div class="suave">última em ${brDate(s.lastDate)}</div></td>
+    <td><form method="post" action="/assinaturas/ignorar">
+      <input type="hidden" name="chave" value="${escapeHtml(s.key)}"><input type="hidden" name="nome" value="${escapeHtml(s.name)}">
+      <button class="discreto" type="submit">Não é assinatura</button></form></td>
+  </tr>`;
+}
+
+function subscriptionTable(list: Subscription[], today: string): string {
+  return `<div class="tabela"><table>
+    <thead><tr><th scope="col">Assinatura</th><th scope="col" class="valor">Valor</th><th scope="col">Cobrança</th><th scope="col"><span class="sr">Ações</span></th></tr></thead>
+    <tbody>${list.map((s) => subscriptionRow(s, today)).join("")}</tbody>
+  </table></div>`;
+}
+
+export function subscriptionsPage(opts: { list: SubscriptionList; today: string; message?: string }): string {
+  const { list, today } = opts;
+  const flash = opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "";
+  const active = list.active.length
+    ? `<div class="resumo"><div class="caixa"><span class="suave">Assinaturas ativas</span><strong>${list.active.length}</strong></div>
+      <div class="caixa"><span class="suave">Por mês</span><strong>${BRL(list.monthlyTotal)}</strong></div>
+      <div class="caixa"><span class="suave">Por ano</span><strong>${BRL(list.monthlyTotal * 12)}</strong></div></div>
+      ${subscriptionTable(list.active, today)}`
+    : '<p>Nenhuma assinatura encontrada ainda. Elas aparecem quando o mesmo gasto se repete por volta de uma vez por mês.</p>';
+  const stopped = list.stopped.length
+    ? `<h2>Pararam</h2><p class="suave">Sem cobrança há mais de 45 dias: talvez tenham sido canceladas.</p>${subscriptionTable(list.stopped, today)}`
+    : "";
+  const ignored = list.ignored.length
+    ? `<h2>Marcadas como “não é assinatura”</h2><ul class="lista-ajustes">${list.ignored
+        .map(
+          (i) => `<li><form class="linha-form" method="post" action="/assinaturas/voltar">
+          <span>${escapeHtml(i.name)}</span><input type="hidden" name="chave" value="${escapeHtml(i.key)}">
+          <button class="discreto" type="submit">Voltar a mostrar</button></form></li>`,
+        )
+        .join("")}</ul>`
+    : "";
+  return layout(
+    "Assinaturas · Jatobá Finance",
+    `  <h1>Assinaturas</h1>${flash}
+  <p class="suave">Encontradas sozinhas: o mesmo estabelecimento, por volta de uma vez por mês, com valor parecido. Parcelas e estornos ficam de fora.</p>
+  ${active}
+  ${stopped}
+  ${ignored}`,
+    { section: "assinaturas", wide: true },
   );
 }

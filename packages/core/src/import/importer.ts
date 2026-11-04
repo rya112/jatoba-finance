@@ -3,7 +3,7 @@ import type { Sql } from "../db.js";
 import { categorize } from "../categories.js";
 import { flagSuspects } from "../duplicates.js";
 import { decodeText, detectLayout, parseCsvStatement, CsvError } from "./csv.js";
-import { parseOfx } from "./ofx.js";
+import { installmentFromText, parseOfx } from "./ofx.js";
 import type { ImportResult, Statement, Transaction } from "./types.js";
 
 /** Grava extratos lidos no banco, sem duplicar lançamentos já importados. */
@@ -67,6 +67,10 @@ function normalizeDescription(value: string): string {
  * O FITID do OFX NÃO entra: o C6 gera FITIDs novos a cada exportação (ver migração 0003).
  * Ele continua guardado em external_id, só como referência.
  */
+function sameInstallment(a: { current: number; total: number } | undefined, b: { current: number; total: number }): boolean {
+  return a !== undefined && a.current === b.current && a.total === b.total;
+}
+
 export function fingerprints(transactions: readonly Transaction[]): string[] {
   const seen = new Map<string, number>();
   return transactions.map((t) => {
@@ -75,7 +79,9 @@ export function fingerprints(transactions: readonly Transaction[]): string[] {
       t.amount,
       normalizeDescription(t.description),
       t.cardLast4 ?? "",
-      t.installment ? `${t.installment.current}/${t.installment.total}` : "",
+      // Parcela que já está no texto (OFX: "LOJA PARC 03/10") não entra de novo, para as impressões
+      // de lançamentos gravados antes de o OFX reconhecer parcelas continuarem iguais.
+      t.installment && !sameInstallment(installmentFromText(t.description), t.installment) ? `${t.installment.current}/${t.installment.total}` : "",
     ].join("|");
     const occurrence = (seen.get(base) ?? 0) + 1;
     seen.set(base, occurrence);

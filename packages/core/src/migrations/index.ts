@@ -243,4 +243,15 @@ export const MIGRATIONS: readonly Migration[] = [
       create index goal_entries_goal_idx on goal_entries (goal_id, date);
     `,
   },
+  {
+    id: "0009_subscription_ignores",
+    sql: `
+      -- Estabelecimentos marcados como "não é assinatura" na página Assinaturas.
+      create table subscription_ignores (
+        key         text primary key,
+        name        text not null,
+        created_at  timestamptz not null default now()
+      );
+    `,
+  },
 ];
