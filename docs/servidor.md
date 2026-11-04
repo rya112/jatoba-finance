@@ -205,7 +205,18 @@ No painel do Tailscale (`login.tailscale.com`):
    ```
 
    Se a sua política ainda for a padrão (que libera tudo para todos os aparelhos da tailnet), qualquer aparelho seu, ou de alguém que você convidou, alcança a página. O login do Jatobá continua obrigatório, mas o ideal é limitar aqui também.
-3. **Settings → Keys**: gere uma chave de autenticação **de uso único**, com a tag `tag:jatoba`.
+3. **Settings → Keys → Generate auth key…**: gere a chave que o contêiner usa para entrar na tailnet:
+
+   | Opção | Valor | Por quê |
+   | --- | --- | --- |
+   | Description | `jatoba` | Para reconhecer depois |
+   | Reusable | desligado | Uso único: serve só para esta máquina |
+   | Expiration | 1 dia | Ela é usada logo em seguida |
+   | Ephemeral | **desligado** | Ligado, a máquina some da tailnet quando o contêiner reinicia |
+   | Pre-approved | ligado | Dispensa aprovar o aparelho à mão, se a tailnet exigir aprovação |
+   | Tags | ligado, `tag:jatoba` | A máquina entra com a tag que a política de acesso usa (a tag só aparece aqui depois de estar em `tagOwners`, item 2) |
+
+   Copie a chave inteira (`tskey-auth-...`): ela só aparece uma vez. Cada chave serve para **uma tentativa**: se der erro antes do login, gere outra.
 4. **Não ative o Funnel** para o Jatobá: ele publica o serviço na internet aberta.
 
 ## 6. Ligar o Tailscale (no LXC)
@@ -224,6 +235,27 @@ docker compose logs tailscale --tail 20
 ```
 
 O contêiner entra na tailnet como `jatoba` e serve a página em `https://jatoba.<sua-tailnet>.ts.net`. Abra esse endereço no celular (com o app do Tailscale ligado) e entre com o login.
+
+Conferir e resolver problemas:
+
+```bash
+# Está logado? Deve mostrar um IP 100.x.y.z com o nome "jatoba".
+docker compose exec tailscale tailscale --socket=/tmp/tailscaled.sock status
+
+# As linhas que importam do log.
+docker compose logs tailscale --tail 80 | grep -iE "authenticate|login|tag|cert|https|error|fail|Startup complete"
+
+# Depois de trocar TS_AUTHKEY no .env, recrie o contêiner (um "up" simples não relê a variável).
+docker compose --profile tailscale up -d --force-recreate tailscale
+```
+
+| No log | Causa | O que fazer |
+| --- | --- | --- |
+| `invalid key` | Chave já usada, expirada ou copiada pela metade | Gere outra (passo 5.3), troque no `.env` e recrie o contêiner |
+| `requested tags ... not permitted` | `tag:jatoba` não está em `tagOwners` | Ajuste a política (passo 5.2) e gere outra chave |
+| algo com `cert` ou `https` | HTTPS desligado na tailnet | Ligue **MagicDNS** e **HTTPS Certificates** (passo 5.1) |
+| `To authenticate, visit: ...` | A chave não chegou ao contêiner (`TS_AUTHKEY` vazia) | Confira a linha no `.env` e recrie o contêiner |
+| `failed to symlink socket: file exists` e `profile not found` | Avisos normais (reinício do contêiner; primeiro login) | Nada; procure outra linha com o erro de verdade |
 
 Depois:
 
