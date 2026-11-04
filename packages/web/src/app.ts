@@ -219,7 +219,9 @@ export function createApp(deps: AppDeps): Hono {
     const requested = Number.parseInt(c.req.query("pagina") ?? "1", 10);
     const page = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), pages) : 1;
     const rows = await deps.ledger.list({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, filter });
-    return c.html(transactionsPage(rows, total, { page, pages, pageSize: PAGE_SIZE }, { month: filter.month, categoryName, query }));
+    const months = await deps.month.months();
+    const categoryParam = filter.category === undefined ? undefined : String(filter.category);
+    return c.html(transactionsPage(rows, total, { page, pages, pageSize: PAGE_SIZE }, { month: filter.month, categoryName, query, months, categoryParam }));
   });
 
   app.get("/mes", async (c) => {
@@ -242,8 +244,13 @@ export function createApp(deps: AppDeps): Hono {
     const outros = Number(c.req.query("outros") ?? 0);
     const aprovados = c.req.query("aprovados");
     const duplicado = c.req.query("duplicado");
+    const lote = c.req.query("lote");
+    const regras = Number(c.req.query("regras") ?? 0);
     let message: string | undefined;
-    if (duplicado === "descartado") message = "Duplicado descartado. Ele não aparece mais e não volta em novas importações.";
+    if (lote !== undefined) {
+      const n = Number(lote) || 0;
+      message = `${n} lançamento(s) salvo(s)${regras > 0 ? `, ${regras} regra(s) criada(s)` : ""}${outros > 0 ? `; ${outros} outro(s) ganharam sugestão` : ""}.`;
+    } else if (duplicado === "descartado") message = "Duplicado descartado. Ele não aparece mais e não volta em novas importações.";
     else if (duplicado === "mantido") message = "Mantidos os dois lançamentos.";
     else if (aprovados !== undefined) message = `${Number(aprovados) || 0} sugestão(ões) aprovada(s).`;
     else if (salvo === "regra") message = `Categoria salva e regra criada${outros > 0 ? `; ${outros} outro(s) lançamento(s) ganharam sugestão` : ""}.`;
@@ -258,6 +265,51 @@ export function createApp(deps: AppDeps): Hono {
     const ids = values.filter((v): v is string => typeof v === "string" && /^\d+$/.test(v));
     const approved = await deps.review.approve(ids);
     return c.redirect(`/revisar?aprovados=${approved}`, 303);
+  });
+
+  /**
+   * Formulário da página inteira. Com "so=<id>", grava só aquele; com "acao=todos", grava todos os que
+   * têm categoria selecionada. Se a escolha é a própria sugestão e não há regra, só aprova (mantém a origem).
+   */
+  app.post("/revisar/lote", bodyLimit({ maxSize: 256 * 1024 }), async (c) => {
+    const form = await c.req.parseBody({ all: true });
+    const one = (key: string) => {
+      const v = form[key];
+      return typeof v === "string" ? v : Array.isArray(v) && typeof v[0] === "string" ? v[0] : "";
+    };
+    const rawIds = form.id;
+    const ids = (Array.isArray(rawIds) ? rawIds : rawIds === undefined ? [] : [rawIds]).filter(
+      (v): v is string => typeof v === "string" && /^\d{1,18}$/.test(v),
+    );
+    const only = one("so");
+    const targets = only ? ids.filter((id) => id === only) : ids;
+
+    let saved = 0;
+    let approved = 0;
+    let rules = 0;
+    let others = 0;
+    const toApprove: string[] = [];
+    try {
+      for (const id of targets) {
+        const choice = Number(one(`categoria_${id}`));
+        if (!Number.isSafeInteger(choice) || choice <= 0) continue; // sem escolha: fica para depois
+        const wantsRule = one(`criar_regra_${id}`) === "1";
+        if (!wantsRule && String(choice) === one(`sugestao_${id}`)) {
+          toApprove.push(id);
+          continue;
+        }
+        const result = await deps.review.setCategory(id, choice, wantsRule ? { rulePattern: one(`regra_${id}`) } : {});
+        saved++;
+        if (result.ruleCreated) rules++;
+        others += result.otherChanged;
+      }
+      if (toApprove.length) approved = await deps.review.approve(toApprove);
+    } catch (error) {
+      if (error instanceof CategoryError) return showReview(c, { error: `${error.message} (${saved + approved} já foram salvos)` }, 400);
+      throw error;
+    }
+    if (only && saved + approved === 0) return showReview(c, { error: "Escolha uma categoria." }, 400);
+    return c.redirect(`/revisar?lote=${saved + approved}&regras=${rules}&outros=${others}`, 303);
   });
 
   app.post("/revisar/:id", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {

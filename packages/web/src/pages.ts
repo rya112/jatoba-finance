@@ -132,6 +132,13 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   a.discreta { color: inherit; text-decoration: none; }
   a.discreta:hover, a.discreta:focus-visible { text-decoration: underline; }
   table.detalhes th { width: 12rem; font-weight: 500; }
+  .salvar-todos { margin: 1rem 0; }
+  .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1rem 0 0.5rem; }
+  .chip { border: 1px solid var(--linha); border-radius: 1rem; padding: 0.2rem 0.75rem; text-decoration: none; color: var(--suave); font-size: 0.95rem; }
+  .chip:hover { border-color: var(--cerne); color: var(--texto); }
+  .chip[aria-current] { background: var(--cerne); border-color: var(--cerne); color: var(--fundo); font-weight: 600; }
+  .linha-cartao { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.6rem; }
+  .linha-cartao select { font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--linha); border-radius: 0.5rem; padding: 0.45rem 0.6rem; max-width: 100%; }
   .etiqueta { display: inline-block; font-size: 0.8rem; color: var(--suave); border: 1px solid var(--linha); border-radius: 1rem; padding: 0 0.5rem; margin-left: 0.4rem; }
 </style>
 </head>
@@ -260,14 +267,24 @@ export function transactionsPage(
   rows: TransactionRow[],
   total: number,
   paging: { page: number; pages: number; pageSize: number } = { page: 1, pages: 1, pageSize: rows.length },
-  filter: { month?: string; categoryName?: string; query?: string } = {},
+  filter: { month?: string; categoryName?: string; query?: string; months?: string[]; categoryParam?: string } = {},
 ): string {
+  // Faixa de meses: "Todos" e cada mês com dados; mantém o filtro de categoria ao trocar de mês.
+  const cat = filter.categoryParam ? `categoria=${encodeURIComponent(filter.categoryParam)}` : "";
+  const chip = (label: string, month: string | undefined) => {
+    const href = `/lancamentos${[month ? `mes=${month.slice(0, 7)}` : "", cat].filter(Boolean).length ? "?" : ""}${[month ? `mes=${month.slice(0, 7)}` : "", cat].filter(Boolean).join("&amp;")}`;
+    const current = (month ?? "") === (filter.month ?? "");
+    return `<a class="chip" href="${href}"${current ? ' aria-current="page"' : ""}>${escapeHtml(label)}</a>`;
+  };
+  const monthChips = filter.months && filter.months.length > 1
+    ? `<nav class="chips" aria-label="Filtrar por mês">${chip("Todos", undefined)}${filter.months.map((m) => chip(monthLabel(m), m)).join("")}</nav>`
+    : "";
   const filterNote = filter.month || filter.categoryName
     ? `<p class="filtro"><span>Filtrando: ${[filter.month ? `<strong>${escapeHtml(monthTitle(filter.month))}</strong>` : "", filter.categoryName ? `<strong>${escapeHtml(filter.categoryName)}</strong>` : ""].filter(Boolean).join(" · ")}</span>
       <a href="/lancamentos">limpar filtro</a>${filter.month ? ` · <a href="/mes?m=${filter.month.slice(0, 7)}">voltar ao mês</a>` : ""}</p>`
     : "";
   if (total === 0 && filterNote) {
-    return layout("Lançamentos · Jatobá Finance", `  <h1>Lançamentos</h1>${filterNote}<p>Nenhum lançamento com este filtro.</p>`, { section: "lancamentos" });
+    return layout("Lançamentos · Jatobá Finance", `  <h1>Lançamentos</h1>${monthChips}${filterNote}<p>Nenhum lançamento com este filtro.</p>`, { section: "lancamentos" });
   }
   if (total === 0) {
     return layout(
@@ -304,6 +321,7 @@ export function transactionsPage(
         ? `, mostrando de ${((paging.page - 1) * paging.pageSize + 1).toLocaleString("pt-BR")} a ${((paging.page - 1) * paging.pageSize + rows.length).toLocaleString("pt-BR")}`
         : ""
     }, do mais recente para o mais antigo. Entradas em verde; saídas negativas.</p>
+  ${monthChips}
   ${filterNote}
   ${pagination(paging.page, paging.pages, filter.query)}
   <div class="tabela"><table>
@@ -321,7 +339,7 @@ const KIND_LABEL: Record<Category["kind"], string> = {
   movimentacao: "Movimentações (não contam como gasto)",
 };
 
-function categorySelect(categories: Category[], selected: number | null): string {
+function categorySelect(categories: Category[], selected: number | null, name = "categoria", required = true): string {
   const groups = (["despesa", "receita", "movimentacao"] as const)
     .map((kind) => {
       const options = categories
@@ -332,7 +350,7 @@ function categorySelect(categories: Category[], selected: number | null): string
     })
     .join("");
   const placeholder = selected === null ? '<option value="" selected>Escolha a categoria</option>' : "";
-  return `<select name="categoria" required aria-label="Categoria">${placeholder}${groups}</select>`;
+  return `<select name="${escapeHtml(name)}"${required ? " required" : ""} aria-label="Categoria">${placeholder}${groups}</select>`;
 }
 
 function suggestionNote(r: ReviewRow, categories: Category[]): string {
@@ -396,15 +414,17 @@ export function reviewPage(opts: {
     );
   }
 
-  const suggestedHere = rows.filter((r) => r.categoryId !== null).map((r) => r.id);
-  const approveAll = suggestedHere.length
-    ? `<form method="post" action="/revisar/aprovar">${suggestedHere
-        .map((id) => `<input type="hidden" name="id" value="${escapeHtml(id)}">`)
-        .join("")}<button type="submit">Aprovar as ${suggestedHere.length} sugestões desta página</button></form>`
-    : "";
+  // Um formulário só para a página: "Salvar todos os escolhidos" grava todos os que têm categoria
+  // selecionada; o "Salvar" de cada cartão (name="so") grava só aquele.
+  const selected = rows.filter((r) => r.categoryId !== null).length;
+  const saveAll = `<div class="linha-form salvar-todos">
+    <button type="submit" name="acao" value="todos">Salvar todos os escolhidos</button>
+    <span class="suave">Grava cada lançamento desta página que estiver com categoria selecionada${selected ? ` (${selected} já vêm com sugestão)` : ""}.</span>
+  </div>`;
 
   const cards = rows
     .map((r) => {
+      const id = escapeHtml(r.id);
       const showOriginal = normalizeText(r.cleanDescription) !== normalizeText(r.description);
       const tags = r.installment ? `<span class="etiqueta">parcela ${escapeHtml(r.installment)}</span>` : "";
       return `<li class="cartao${r.categoryId === null ? " sem-sugestao" : ""}">
@@ -413,13 +433,15 @@ export function reviewPage(opts: {
         <span class="valor${r.amount > 0 ? " entrada" : ""}">${escapeHtml(formatMoney(r.amount, "pt-BR", r.currency))}</span>
       </div>
       <div class="original">${brDate(r.date)} · ${escapeHtml(r.accountName)}${showOriginal ? ` · original: ${escapeHtml(r.description)}` : ""}</div>
-      <form method="post" action="/revisar/${escapeHtml(r.id)}">
-        ${categorySelect(categories, r.categoryId)}
-        <button type="submit">Salvar</button>
+      <div class="linha-cartao">
+        <input type="hidden" name="id" value="${id}">
+        <input type="hidden" name="sugestao_${id}" value="${r.categoryId ?? ""}">
+        ${categorySelect(categories, r.categoryId, `categoria_${id}`, false)}
+        <button type="submit" name="so" value="${id}">Salvar</button>
         ${suggestionNote(r, categories)}
-        <label class="regra"><input type="checkbox" name="criar_regra" value="1"> Usar sempre que a descrição contiver
-          <input type="text" name="regra" value="${escapeHtml(normalizeText(r.cleanDescription))}" aria-label="Texto da regra"></label>
-      </form>
+        <label class="regra"><input type="checkbox" name="criar_regra_${id}" value="1"> Usar sempre que a descrição contiver
+          <input type="text" name="regra_${id}" value="${escapeHtml(normalizeText(r.cleanDescription))}" aria-label="Texto da regra"></label>
+      </div>
     </li>`;
     })
     .join("");
@@ -432,8 +454,11 @@ export function reviewPage(opts: {
     `  <h1>Revisar</h1>${flash}${suspects}
   <p>${total.toLocaleString("pt-BR")} lançamento(s) para revisar, ${withSuggestion.toLocaleString("pt-BR")} com sugestão. Os sem sugestão aparecem primeiro.</p>
   <p class="suave">Confira a categoria e salve. Marque “usar sempre” para criar uma regra: ela vale para todos os lançamentos parecidos, inclusive os próximos.</p>
-  ${approveAll}
+  <form method="post" action="/revisar/lote">
+  ${saveAll}
   <ul class="cartoes">${cards}</ul>
+  ${rows.length > 5 ? saveAll : ""}
+  </form>
   ${more}`,
     { section: "revisar", wide: true },
   );

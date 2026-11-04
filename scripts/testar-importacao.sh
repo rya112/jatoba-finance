@@ -128,6 +128,15 @@ check "progresso: R\$ 1.500 do aporte + R\$ 500" "$(sql "select sum(amount) from
 curl -s -b "$JAR" "$URL/metas" > "$TMP/metas.html"
 grep -qF "20% · faltam" "$TMP/metas.html" && ok "página mostra 20% e quanto falta" || fail "progresso não aparece: $(grep -o '[0-9]*% · faltam[^<]*' "$TMP/metas.html" | head -2)"
 
+echo "== Revisar em lote e faixa de meses"
+PEND="$(sql "select string_agg(id::text, ',' order by id) from (select id from transactions where not reviewed and duplicate_of is null and suspect_of is null order by id limit 2) x")"
+A="${PEND%%,*}"; B="${PEND##*,}"
+LAZER="$(sql "select id from categories where name = 'Lazer'")"
+check "salvar dois de uma vez" "$(form /revisar/lote "id=$A&sugestao_$A=&categoria_$A=$LAZER&id=$B&sugestao_$B=&categoria_$B=$LAZER&acao=todos")" "303"
+check "os dois ficaram em Lazer e revisados" "$(sql "select count(*) from transactions where id in ($A, $B) and category_id = $LAZER and reviewed")" "2"
+has "/lancamentos" 'class="chip"' && ok "Lançamentos mostra a faixa de meses" || fail "sem faixa de meses"
+has "/lancamentos?mes=2026-10" 'href="/lancamentos?mes=2026-10" aria-current="page"' && ok "mês escolhido fica destacado" || fail "mês não destacado"
+
 echo "== Editar depois de revisado"
 TXID="$(sql "select id from transactions where description = 'MERCADO EXEMPLO'")"
 check "lançamento está revisado" "$(sql "select reviewed from transactions where id = $TXID")" "t"

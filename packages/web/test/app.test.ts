@@ -360,7 +360,8 @@ describe("revisar", () => {
     const html = await (await app.request("/revisar", { headers: { Cookie: cookie } })).text();
     expect(html).toContain("2 lançamento(s) para revisar, 1 com sugestão");
     expect(html).toContain("pela regra “FATURA”");
-    expect(html).toContain("Aprovar as 1 sugestões desta página");
+    expect(html).toContain("Salvar todos os escolhidos");
+    expect(html).toContain("(1 já vêm com sugestão)");
     expect(html).not.toContain("<b>MERCADO</b>");
     expect(html).toContain("&#60;b&#62;MERCADO&#60;/b&#62;");
     expect(html).toContain('<option value="3" selected>Pagamento de fatura</option>');
