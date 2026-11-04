@@ -30,6 +30,7 @@ const schema = z
     TZ: z.string().default("America/Sao_Paulo"),
     AI_PROVIDER: z.enum(["none", "anthropic", "ollama"]).default("none"),
     ANTHROPIC_API_KEY: z.string().optional(),
+    ANTHROPIC_MODEL: z.string().trim().default("claude-haiku-5-5"),
     OLLAMA_URL: z.url().optional(),
     TELEGRAM_BOT_TOKEN: z.string().optional(),
     TELEGRAM_ALLOWED_CHAT_IDS: z.string().optional(),

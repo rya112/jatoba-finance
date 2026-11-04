@@ -254,4 +254,21 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    id: "0010_ai_suggestions",
+    sql: `
+      -- Sugestões da IA, uma por estabelecimento (descrição limpa + direção + tipo de conta),
+      -- para cada um ser perguntado uma vez só. category_id nulo = a IA não soube.
+      create table ai_suggestions (
+        key          text primary key,
+        category_id  integer references categories (id) on delete cascade,
+        model        text not null,
+        created_at   timestamptz not null default now()
+      );
+
+      alter table transactions drop constraint transactions_category_source_check;
+      alter table transactions add constraint transactions_category_source_check
+        check (category_source in ('manual', 'regra', 'banco', 'estorno', 'ia'));
+    `,
+  },
 ];

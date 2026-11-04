@@ -5,7 +5,7 @@ import type { Sql } from "./db.js";
 export type CategoryKind = "despesa" | "receita" | "movimentacao";
 export type Direction = "saida" | "entrada";
 export type AccountKind = "conta" | "cartao";
-export type CategorySource = "manual" | "regra" | "banco" | "estorno";
+export type CategorySource = "manual" | "regra" | "banco" | "estorno" | "ia";
 
 export interface Category {
   id: number;
@@ -209,6 +209,8 @@ export async function categorize(sql: Sql, opts: { onlyIds?: string[]; refundPas
       if (purchase) s = { categoryId: purchase.categoryId, source: "estorno", refundOf: purchase.id };
       else refundsWithoutMatch.push(r.id);
     }
+    // Sem regra, banco nem estorno: a sugestão da IA, se houver, continua (regra nova vence a IA).
+    if (!s && r.category_source === "ia" && r.category_id !== null) s = { categoryId: r.category_id, source: "ia" };
     const clean = cleanDescription(r.description);
     const category = s?.categoryId ?? null;
     const source = s?.source ?? null;

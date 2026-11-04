@@ -356,6 +356,9 @@ function categorySelect(categories: Category[], selected: number | null, name = 
 function suggestionNote(r: ReviewRow, categories: Category[]): string {
   if (r.categoryId === null) return '<span class="sugestao">Sem sugestão.</span>';
   const name = categories.find((c) => c.id === r.categoryId)?.name ?? "";
+  if (r.categorySource === "ia") {
+    return `<span class="sugestao">Sugerido pela IA: ${escapeHtml(name)}. Confira antes de salvar.</span>`;
+  }
   if (r.categorySource === "estorno") {
     return `<span class="sugestao">Sugerido: ${escapeHtml(name)}, igual à compra estornada${r.refundOfDate ? ` de ${brDate(r.refundOfDate)}` : ""}.</span>`;
   }
@@ -397,8 +400,17 @@ export function reviewPage(opts: {
   suspects?: SuspectPair[];
   message?: string;
   error?: string;
+  /** IA ligada? (e, se desligada por erro, o motivo) */
+  ai?: { enabled: boolean; reason?: string };
 }): string {
   const { rows, total, withSuggestion, categories } = opts;
+  const withoutSuggestion = total - withSuggestion;
+  const aiBox = opts.ai?.enabled && withoutSuggestion > 0
+    ? `<form class="linha-form" method="post" action="/revisar/ia"><button class="discreto" type="submit">Sugerir com IA</button>
+      <span class="suave">Pede à IA uma sugestão para os ${withoutSuggestion} sem sugestão. Vai só a descrição de cada um; valores, datas e contas não.</span></form>`
+    : opts.ai?.reason
+      ? `<p class="suave">IA desligada: ${escapeHtml(opts.ai.reason)}</p>`
+      : "";
   const suspects = suspectsSection(opts.suspects ?? []);
   const flash = [
     opts.message ? `<div class="painel" role="status"><p>${escapeHtml(opts.message)}</p></div>` : "",
@@ -454,6 +466,7 @@ export function reviewPage(opts: {
     `  <h1>Revisar</h1>${flash}${suspects}
   <p>${total.toLocaleString("pt-BR")} lançamento(s) para revisar, ${withSuggestion.toLocaleString("pt-BR")} com sugestão. Os sem sugestão aparecem primeiro.</p>
   <p class="suave">Confira a categoria e salve. Marque “usar sempre” para criar uma regra: ela vale para todos os lançamentos parecidos, inclusive os próximos.</p>
+  ${aiBox}
   <form method="post" action="/revisar/lote">
   ${saveAll}
   <ul class="cartoes">${cards}</ul>
@@ -878,6 +891,7 @@ const SOURCE_LABEL: Record<string, string> = {
   regra: "sugerida por regra",
   banco: "sugerida pela categoria do banco",
   estorno: "igual à da compra estornada",
+  ia: "sugerida pela IA",
 };
 
 export function transactionPage(opts: { t: TransactionDetail; categories: Category[]; message?: string; error?: string }): string {

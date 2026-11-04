@@ -1,9 +1,14 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { basename } from "node:path";
 import {
+  AiError,
   ConfigError,
   MigrationError,
+  estimateCostUsd,
+  suggestWithAi,
+  type AiRunResult,
   approveSuggestions,
   categorize,
   listCategories,
@@ -133,6 +138,42 @@ const backupConfig = {
   hour: config.JATOBA_BACKUP_HOUR,
   keep: config.JATOBA_BACKUP_KEEP,
 };
+// ---------- IA para sugerir categorias (opcional: AI_PROVIDER=anthropic + ANTHROPIC_API_KEY) ----------
+let aiDisabledReason: string | undefined;
+let aiRunning: Promise<AiRunResult> | undefined;
+const aiClient = config.AI_PROVIDER === "anthropic" && config.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: config.ANTHROPIC_API_KEY, maxRetries: 3 }) : undefined;
+if (config.AI_PROVIDER === "ollama") aiDisabledReason = "o Ollama ainda não é suportado; use AI_PROVIDER=anthropic.";
+/** Uma execução por vez; quem chega enquanto roda espera a mesma. */
+const runAi = (): Promise<AiRunResult> => {
+  if (!aiClient || aiDisabledReason) return Promise.reject(new Error(aiDisabledReason ?? "IA desligada."));
+  aiRunning ??= suggestWithAi(sql, aiClient, { model: config.ANTHROPIC_MODEL, log: (m) => console.log(m) })
+    .then((r) => {
+      if (r.asked || r.suggested) {
+        console.log(`IA: ${r.asked} estabelecimento(s) consultado(s), ${r.suggested} lançamento(s) com sugestão, ${r.unknown} sem resposta; custo aproximado US$ ${estimateCostUsd(r).toFixed(4)}.`);
+      }
+      return r;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof AiError) {
+        aiDisabledReason = error.message;
+        console.warn(`IA desligada: ${error.message}`);
+      }
+      throw error;
+    })
+    .finally(() => {
+      aiRunning = undefined;
+    });
+  return aiRunning;
+};
+/** Em segundo plano (depois de importar e ao subir): erros só vão para o log. */
+const runAiInBackground = () => {
+  if (aiClient && !aiDisabledReason) void runAi().catch(() => {});
+};
+if (aiClient) {
+  console.log(`IA ligada: ${config.ANTHROPIC_MODEL} para sugerir categorias dos lançamentos sem sugestão.`);
+  setTimeout(runAiInBackground, 5_000).unref();
+}
+
 // ---------- Bot do Telegram (opcional: só com TELEGRAM_BOT_TOKEN no .env) ----------
 let bot: TelegramBot | undefined;
 if (config.TELEGRAM_BOT_TOKEN) {
@@ -179,6 +220,7 @@ const app = createApp({
   ledger: {
     importFile: async (fileName, bytes) => {
       const outcome = await importFile(sql, fileName, bytes);
+      runAiInBackground();
       const inserted = outcome.statements.reduce((n, s) => n + s.inserted, 0);
       const suspects = outcome.statements.reduce((n, s) => n + s.suspects, 0);
       if (bot && inserted > 0) {
@@ -194,6 +236,11 @@ const app = createApp({
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
   },
+  ai: aiClient
+    ? { status: () => ({ enabled: !aiDisabledReason, reason: aiDisabledReason }), run: runAi }
+    : aiDisabledReason
+      ? { status: () => ({ enabled: false, reason: aiDisabledReason }), run: runAi }
+      : undefined,
   backups: {
     status: () => backupStatus({ ...backupConfig, configured: Boolean(config.JATOBA_BACKUP_RECIPIENT) }),
     runNow: async () => {

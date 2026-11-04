@@ -17,6 +17,7 @@ const row = (id: string, categoryId: number | null): ReviewRow => ({
 });
 
 let calls: unknown[][];
+let ai: { status: () => { enabled: boolean; reason?: string }; run: () => Promise<{ asked: number; suggested: number; unknown: number; inputTokens: number; outputTokens: number; skippedBatches: number }> } | undefined;
 let lastFilter: unknown;
 
 async function setup() {
@@ -55,6 +56,7 @@ async function setup() {
     },
     month: { months: async () => ["2026-11-01", "2026-10-01", "2026-09-01"], summary: async () => { throw new Error("sem uso"); } },
     settings: { categories: empty, rules: empty, accounts: empty, createCategory: async () => 1, updateCategory: async () => {}, deleteCategory: async () => 0, createRule: async () => 0, updateRule: async () => 0, deleteRule: async () => 0, renameAccount: async () => {} },
+    ai,
     backups: { status: async () => ({ configured: true, daily: true, hour: 3, keep: 14, count: 0 }), runNow: async () => "b" },
     transaction: { get: async () => undefined, reopen: async () => {} },
     subscriptions: { list: async () => ({ active: [], stopped: [], ignored: [], monthlyTotal: 0 }), ignore: async () => {}, unignore: async () => {} },
@@ -84,6 +86,7 @@ function pageFields(choices: Record<string, string>, extra: [string, string][] =
 
 beforeEach(() => {
   calls = [];
+  ai = undefined;
   lastFilter = undefined;
 });
 
@@ -153,5 +156,48 @@ describe("Lançamentos: faixa de meses", () => {
     expect(oct).toContain('<a class="chip" href="/lancamentos?mes=2026-10&amp;categoria=sem" aria-current="page">out/2026</a>');
     expect(oct).toContain('<a class="chip" href="/lancamentos?categoria=sem">Todos</a>');
     expect(lastFilter).toEqual({ month: "2026-10-01", category: "sem" });
+  });
+});
+
+describe("Revisar: sugerir com IA", () => {
+  const result = { asked: 3, suggested: 5, unknown: 1, inputTokens: 100, outputTokens: 10, skippedBatches: 0 };
+
+  it("sem IA configurada, não aparece o botão", async () => {
+    const { get } = await setup();
+    expect(await (await get("/revisar")).text()).not.toContain("Sugerir com IA");
+  });
+
+  it("com IA, o botão aparece, roda e informa o resultado", async () => {
+    ai = { status: () => ({ enabled: true }), run: async () => { calls.push(["ai"]); return result; } };
+    const { get, post } = await setup();
+    const page = await (await get("/revisar")).text();
+    expect(page).toContain("Sugerir com IA");
+    expect(page).toContain("para os 2 sem sugestão");
+    const res = await post("/revisar/ia", []);
+    expect(res.headers.get("location")).toBe("/revisar?ia=5&ia_nao=1");
+    expect(calls).toEqual([["ai"]]);
+    expect(await (await get("/revisar?ia=5&ia_nao=1")).text()).toContain("A IA sugeriu categoria para 5 lançamento(s); em 1 estabelecimento(s) ela preferiu não chutar");
+  });
+
+  it("IA desligada por erro mostra o motivo; o botão não roda", async () => {
+    ai = { status: () => ({ enabled: false, reason: "A chave da Anthropic foi recusada." }), run: async () => result };
+    const { get, post } = await setup();
+    expect(await (await get("/revisar")).text()).toContain("IA desligada: A chave da Anthropic foi recusada.");
+    expect((await post("/revisar/ia", [])).status).toBe(400);
+  });
+
+  it("falha da API aparece na página", async () => {
+    ai = { status: () => ({ enabled: true }), run: async () => { throw new Error("sem contato"); } };
+    const { post } = await setup();
+    const res = await post("/revisar/ia", []);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("A IA não respondeu: sem contato");
+  });
+
+  it("envio de outro site é bloqueado", async () => {
+    ai = { status: () => ({ enabled: true }), run: async () => { calls.push(["ai"]); return result; } };
+    const { post } = await setup();
+    expect((await post("/revisar/ia", [], "https://site-malicioso.example")).status).toBe(403);
+    expect(calls).toEqual([]);
   });
 });

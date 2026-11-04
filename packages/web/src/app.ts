@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
-import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
+import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type AiRunResult, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 import type { BackupStatus } from "./scheduler.js";
 import { goalsPage, homePage, subscriptionsPage, transactionPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
@@ -25,6 +25,11 @@ export interface AppDeps {
     importFile: (fileName: string, bytes: Uint8Array) => Promise<ImportOutcome>;
     list: (opts?: { limit?: number; offset?: number; filter?: TransactionFilter }) => Promise<TransactionRow[]>;
     count: (filter?: TransactionFilter) => Promise<number>;
+  };
+  /** IA para sugerir categorias (opcional). */
+  ai?: {
+    status: () => { enabled: boolean; reason?: string };
+    run: () => Promise<AiRunResult>;
   };
   backups: {
     status: () => Promise<BackupStatus>;
@@ -236,7 +241,7 @@ export function createApp(deps: AppDeps): Hono {
 
   const showReview = async (c: Context, flash: { message?: string; error?: string } = {}, status: 200 | 400 = 200) => {
     const [list, categories, suspects] = await Promise.all([deps.review.list({ limit: 50 }), deps.review.categories(), deps.review.suspects()]);
-    return c.html(reviewPage({ ...list, categories, suspects, ...flash }), status);
+    return c.html(reviewPage({ ...list, categories, suspects, ai: deps.ai?.status(), ...flash }), status);
   };
 
   app.get("/revisar", (c) => {
@@ -246,8 +251,12 @@ export function createApp(deps: AppDeps): Hono {
     const duplicado = c.req.query("duplicado");
     const lote = c.req.query("lote");
     const regras = Number(c.req.query("regras") ?? 0);
+    const ia = c.req.query("ia");
     let message: string | undefined;
-    if (lote !== undefined) {
+    if (ia !== undefined) {
+      const naoSoube = Number(c.req.query("ia_nao") ?? 0);
+      message = `A IA sugeriu categoria para ${Number(ia) || 0} lançamento(s)${naoSoube > 0 ? `; em ${naoSoube} estabelecimento(s) ela preferiu não chutar` : ""}. Confira antes de salvar.`;
+    } else if (lote !== undefined) {
       const n = Number(lote) || 0;
       message = `${n} lançamento(s) salvo(s)${regras > 0 ? `, ${regras} regra(s) criada(s)` : ""}${outros > 0 ? `; ${outros} outro(s) ganharam sugestão` : ""}.`;
     } else if (duplicado === "descartado") message = "Duplicado descartado. Ele não aparece mais e não volta em novas importações.";
@@ -310,6 +319,16 @@ export function createApp(deps: AppDeps): Hono {
     }
     if (only && saved + approved === 0) return showReview(c, { error: "Escolha uma categoria." }, 400);
     return c.redirect(`/revisar?lote=${saved + approved}&regras=${rules}&outros=${others}`, 303);
+  });
+
+  app.post("/revisar/ia", bodyLimit({ maxSize: 1024 }), async (c) => {
+    if (!deps.ai?.status().enabled) return showReview(c, { error: "A IA não está ligada (AI_PROVIDER e ANTHROPIC_API_KEY no .env)." }, 400);
+    try {
+      const r = await deps.ai.run();
+      return c.redirect(`/revisar?ia=${r.suggested}&ia_nao=${r.unknown}`, 303);
+    } catch (error) {
+      return showReview(c, { error: `A IA não respondeu: ${(error as Error).message}` }, 400);
+    }
   });
 
   app.post("/revisar/:id", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {

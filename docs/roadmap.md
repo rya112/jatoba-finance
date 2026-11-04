@@ -38,4 +38,5 @@ As fases 1 a 5 publicam versões `0.x` (a `0.1` ao fim da fase 2). A `1.0` marca
 - [ ] Fase 3: critério de pronto — fechar um mês em menos de 20 minutos (com uso real)
 - [x] Fase 4: backup automático diário
 - [x] Fase 4: bot do Telegram (opcional)
-- [ ] Fase 4: IA para sugerir categorias (opcional; Anthropic ou Ollama)
+- [x] Fase 4: IA para sugerir categorias (opcional; Anthropic)
+- [ ] Fase 4: IA local com Ollama (opcional)

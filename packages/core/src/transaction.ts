@@ -21,7 +21,7 @@ export interface TransactionDetail {
   foreign?: { amount: number; currency: string; rate: string | null };
   categoryId: number | null;
   categoryName: string | null;
-  categorySource: "manual" | "regra" | "banco" | "estorno" | null;
+  categorySource: "manual" | "regra" | "banco" | "estorno" | "ia" | null;
   rulePattern: string | null;
   reviewed: boolean;
   fileName: string;

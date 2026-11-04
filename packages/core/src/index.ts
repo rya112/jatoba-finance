@@ -104,3 +104,4 @@ export {
   type SubscriptionList,
 } from "./subscriptions.js";
 export { getTransaction, reopenReview, type TransactionDetail } from "./transaction.js";
+export { suggestWithAi, classifyWithAi, systemPrompt, aiKey, estimateCostUsd, AiError, DEFAULT_AI_MODEL, type AiClient, type AiItem, type AiRunResult } from "./ai.js";
