@@ -51,6 +51,8 @@ import {
 } from "@jatoba/core";
 import { createBackup } from "./backup.js";
 import { backupStatus, startScheduler } from "./scheduler.js";
+import { createResponder } from "./bot-commands.js";
+import { TelegramBot, tg } from "./telegram.js";
 import { createApp } from "./app.js";
 import { Credentials, LoginLimiter, PgSessionStore } from "./auth.js";
 import { VERSION } from "./version.js";
@@ -131,11 +133,34 @@ const backupConfig = {
   hour: config.JATOBA_BACKUP_HOUR,
   keep: config.JATOBA_BACKUP_KEEP,
 };
+// ---------- Bot do Telegram (opcional: só com TELEGRAM_BOT_TOKEN no .env) ----------
+let bot: TelegramBot | undefined;
+if (config.TELEGRAM_BOT_TOKEN) {
+  const respond = createResponder({
+    botName: config.BOT_NAME,
+    timeZone: config.TZ,
+    publicUrl: config.JATOBA_PUBLIC_URL,
+    months: () => listMonths(sql, config.JATOBA_CURRENCY),
+    month: (m) => monthSummary(sql, m, config.JATOBA_CURRENCY),
+    goals: () => listGoals(sql, today()),
+    review: async () => ({ pending: (await listForReview(sql, { limit: 1 })).total, suspects: (await listSuspects(sql)).length }),
+    subscriptions: () => listSubscriptions(sql, today(), config.JATOBA_CURRENCY),
+    backup: () => backupStatus({ ...backupConfig, configured: Boolean(config.JATOBA_BACKUP_RECIPIENT) }),
+  });
+  bot = new TelegramBot({ token: config.TELEGRAM_BOT_TOKEN, allowedChatIds: config.telegramAllowedChatIds, respond });
+  bot.start();
+  console.log(`Bot do Telegram ligado (${config.telegramAllowedChatIds.length} chat(s) autorizado(s)).`);
+}
+
 const scheduler = startScheduler({
   ...backupConfig,
   databaseUrl: config.DATABASE_URL,
   recipient: config.JATOBA_BACKUP_RECIPIENT,
   timeZone: config.TZ,
+  log: (message) => {
+    console.log(message);
+    if (message.startsWith("Backup diário falhou")) void bot?.notify(`⚠️ ${tg(message)}`);
+  },
 });
 if (backupConfig.daily && config.JATOBA_BACKUP_RECIPIENT) {
   console.log(`Backup diário ligado: a partir das ${backupConfig.hour}h (${config.TZ}), guardando ${backupConfig.keep}.`);
@@ -152,7 +177,20 @@ const app = createApp({
   checkDatabase: () => isDatabaseUp(sql),
   clientKey: (c) => getConnInfo(c).remote.address ?? "desconhecido",
   ledger: {
-    importFile: (fileName, bytes) => importFile(sql, fileName, bytes),
+    importFile: async (fileName, bytes) => {
+      const outcome = await importFile(sql, fileName, bytes);
+      const inserted = outcome.statements.reduce((n, s) => n + s.inserted, 0);
+      const suspects = outcome.statements.reduce((n, s) => n + s.suspects, 0);
+      if (bot && inserted > 0) {
+        const pending = (await listForReview(sql, { limit: 1 })).total;
+        void bot.notify(
+          `Importado <b>${tg(fileName)}</b>: ${inserted} novo(s).` +
+            (pending ? ` ${pending} para revisar.` : "") +
+            (suspects ? ` ${suspects} possível(is) duplicado(s).` : ""),
+        );
+      }
+      return outcome;
+    },
     list: (opts) => listTransactions(sql, opts),
     count: (filter) => countTransactions(sql, filter),
   },
@@ -219,6 +257,7 @@ const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" 
 });
 
 const shutdown = () => {
+  bot?.stop();
   scheduler.stop();
   server.close();
   void sql.end({ timeout: 5 }).finally(() => process.exit(0));

@@ -43,6 +43,7 @@ Abra http://localhost:8080 e entre com o usuário e a senha do `.env`. A página
 | Assunto | Página |
 | --- | --- |
 | Backup e restauração | [docs/backup.md](docs/backup.md) |
+| Bot do Telegram (opcional) | [docs/telegram.md](docs/telegram.md) |
 | Acesso remoto seguro (Tailscale) | [docs/acesso-remoto.md](docs/acesso-remoto.md) |
 | Atualizar para uma nova versão | [docs/atualizar.md](docs/atualizar.md) |
 | Atualizar Docker, sistema e Postgres | [docs/ambiente.md](docs/ambiente.md) |

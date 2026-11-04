@@ -22,5 +22,5 @@ Antes da 1.0, só a versão mais recente recebe correções. Depois da 1.0, a ve
 - Por padrão, a página só abre no próprio computador (`127.0.0.1`).
 - Acesso remoto só por rede privada (Tailscale ou WireGuard). Não exponha o Jatobá na internet.
 - Usuário e senha obrigatórios; a senha é guardada como hash.
-- IA e bot do Telegram vêm desligados.
+- IA e bot do Telegram vêm desligados. O bot só lê, só responde aos chats autorizados e não envia descrições completas, números de conta nem extratos.
 - Backups saem criptografados.

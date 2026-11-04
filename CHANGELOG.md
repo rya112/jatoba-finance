@@ -23,6 +23,7 @@ Cada versão tem as seções **Novidades**, **Correções**, **Segurança** e, q
 - Página **Importar**: envie o OFX da conta ou o CSV da fatura do C6. Duplicados são ignorados, inclusive em períodos que se sobrepõem e em reenvios do mesmo arquivo.
 - Página **Lançamentos** com tudo o que foi importado, e menu de navegação.
 - Categorias (despesas, receitas e movimentações, que não contam como gasto) e página **Revisar**: cada lançamento chega com uma sugestão, vinda das suas regras, das regras do sistema (fatura, investimentos, salário, tarifas) ou da categoria do C6. Você confirma ou corrige; com “usar sempre”, a correção vira regra para os parecidos. Categoria escolhida à mão nunca é sobrescrita.
+- **Bot do Telegram** (opcional): `/mes`, `/metas`, `/revisar`, `/assinaturas` e `/backup`, mais avisos quando uma importação termina e quando o backup diário falha. Só lê, só responde aos chats autorizados e não precisa expor o Jatobá na internet. Veja `docs/telegram.md`.
 - **Revisar**: “Salvar todos os escolhidos” grava de uma vez todos os lançamentos da página com categoria selecionada (sugestões mantidas só são aprovadas; “usar sempre” cria a regra de cada um).
 - **Lançamentos**: faixa de meses para filtrar com um clique, mantendo o filtro de categoria.
 - **Backup automático diário** (a partir das 3h, ou assim que o computador ligar depois), guardando os 14 mais recentes; configurável no `.env`. **Ajustes → Backups** mostra o último e tem **Fazer backup agora**; a página inicial avisa se não houver backup há 7 dias ou mais.
