@@ -21,7 +21,7 @@ const NAV: { id: Section; href: string; label: string }[] = [
 function layout(title: string, body: string, opts: { section?: Section; wide?: boolean } = {}): string {
   const nav = opts.section
     ? `<header class="topo">
-    <a class="marca" href="/"><span class="anel pequeno" aria-hidden="true"></span>Jatobá</a>
+    <a class="marca" href="/"><img class="anel pequeno" src="/icone.svg" alt="" width="22" height="22">Jatobá</a>
     <nav aria-label="Principal">${NAV.map(
       (item) => `<a href="${item.href}"${item.id === opts.section ? ' aria-current="page"' : ""}>${item.label}</a>`,
     ).join("")}</nav>
@@ -34,6 +34,7 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<link rel="icon" href="/icone.svg" type="image/svg+xml">
 <title>${escapeHtml(title)}</title>
 <style>
   :root {
@@ -54,9 +55,8 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   h1 { font-size: clamp(2rem, 7vw, 3rem); line-height: 1.1; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
   a { color: var(--cerne); }
-  .anel { width: 3.5rem; height: 3.5rem; border-radius: 50%; margin-bottom: 1.5rem; display: inline-block;
-    background: radial-gradient(circle, var(--cerne) 0 18%, transparent 19% 34%, var(--cerne) 35% 42%, transparent 43% 58%, var(--cerne) 59% 64%, transparent 65%); }
-  .anel.pequeno { width: 1.4rem; height: 1.4rem; margin: 0 0.5rem 0 0; vertical-align: -0.3rem; }
+  .anel { width: 3.5rem; height: 3.5rem; margin-bottom: 1.5rem; display: block; }
+  .anel.pequeno { width: 1.4rem; height: 1.4rem; margin: 0 0.5rem 0 0; display: inline-block; vertical-align: -0.3rem; }
   .topo { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; padding: 0.75rem 1.5rem;
     border-bottom: 1px solid var(--linha); }
   .topo .marca { font-weight: 650; color: var(--texto); text-decoration: none; }
@@ -145,7 +145,7 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
 <body>
 ${nav}
 <main class="${[opts.section ? "com-topo" : "", opts.wide ? "largo" : ""].join(" ").trim()}">
-${opts.section ? "" : '  <div class="anel" aria-hidden="true"></div>\n'}${body}
+${opts.section ? "" : '  <img class="anel" src="/icone.svg" alt="" width="56" height="56">\n'}${body}
 </main>
 </body>
 </html>`;

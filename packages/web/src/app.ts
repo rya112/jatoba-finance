@@ -6,6 +6,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
 import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type AiRunResult, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 import type { BackupStatus } from "./scheduler.js";
+import { ICON_SVG } from "./icone.js";
 import { goalsPage, homePage, subscriptionsPage, transactionPage, importPage, loginPage, monthPage, reviewPage, settingsPage, transactionsPage } from "./pages.js";
 
 export const SESSION_COOKIE = "jatoba_sessao";
@@ -111,6 +112,13 @@ export function createApp(deps: AppDeps): Hono {
       origin: (origin, c) => origin === new URL(c.req.url).origin || origin === publicOrigin,
     }),
   );
+
+  // Ícone (público: aparece na aba do navegador e na tela de entrar).
+  app.get("/icone.svg", (c) => {
+    c.header("Content-Type", "image/svg+xml");
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.body(ICON_SVG);
+  });
 
   app.get("/health", async (c) => {
     const database = await deps.checkDatabase();

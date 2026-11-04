@@ -204,3 +204,14 @@ describe("Ajustes", () => {
     expect(settings.calls).toEqual([]);
   });
 });
+
+describe("ícone", () => {
+  it("é público (aparece na tela de entrar) e sai como SVG", async () => {
+    const app = await makeApp();
+    const res = await app.request("/icone.svg");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/svg+xml");
+    expect(await res.text()).toContain("<svg");
+    expect(await (await app.request("/entrar")).text()).toContain('<link rel="icon" href="/icone.svg"');
+  });
+});

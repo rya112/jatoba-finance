@@ -30,6 +30,8 @@ bash scripts/testar-backup.sh
 bash scripts/testar-importacao.sh
 ```
 
+Capturas de tela do README (dados fictícios, Edge/Chrome sem janela): `bash scripts/gerar-capturas.sh`.
+
 ## Antes de abrir um pull request
 
 - `npm run build` e `npm test` passam.
