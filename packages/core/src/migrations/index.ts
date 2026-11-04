@@ -271,4 +271,17 @@ export const MIGRATIONS: readonly Migration[] = [
         check (category_source in ('manual', 'regra', 'banco', 'estorno', 'ia'));
     `,
   },
+  {
+    id: "0011_session_idle",
+    sql: `
+      -- Último uso de cada sessão, para expirar por inatividade.
+      alter table sessions add column last_seen_at timestamptz not null default now();
+
+      -- Estado interno do app (hoje: o hash das credenciais, para derrubar sessões quando a senha muda).
+      create table app_state (
+        key    text primary key,
+        value  bytea not null
+      );
+    `,
+  },
 ];

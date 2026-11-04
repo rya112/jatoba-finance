@@ -37,25 +37,47 @@ export function newSessionToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-export const SESSION_DAYS = 30;
+export interface SessionLimits {
+  /** Expira depois deste tempo sem uso. */
+  idleMinutes: number;
+  /** Expira depois deste tempo desde o login, mesmo em uso. */
+  maxHours: number;
+}
 
-/** Sessões ficam no banco só como hash do token: quem ler o banco não consegue entrar. */
+export const DEFAULT_SESSION_LIMITS: SessionLimits = { idleMinutes: 60, maxHours: 12 };
+
+/**
+ * Sessões ficam no banco só como hash do token: quem ler o banco não consegue entrar.
+ * Cada sessão expira pelo que vier primeiro: inatividade ou tempo máximo desde o login.
+ */
 export interface SessionStore {
-  create(token: string, expiresAt: Date): Promise<void>;
-  isValid(token: string): Promise<boolean>;
+  /** Cria a sessão e devolve quando ela expira de qualquer jeito (tempo máximo). */
+  create(token: string): Promise<Date>;
+  /** A sessão vale? Se valer, conta como uso (renova a inatividade). */
+  touch(token: string): Promise<boolean>;
   delete(token: string): Promise<void>;
   purgeExpired(): Promise<number>;
 }
 
 export class PgSessionStore implements SessionStore {
-  constructor(private readonly sql: Sql) {}
+  constructor(
+    private readonly sql: Sql,
+    private readonly limits: SessionLimits = DEFAULT_SESSION_LIMITS,
+  ) {}
 
-  async create(token: string, expiresAt: Date): Promise<void> {
+  async create(token: string): Promise<Date> {
+    const expiresAt = new Date(Date.now() + this.limits.maxHours * 60 * 60_000);
     await this.sql`insert into sessions (token_hash, expires_at) values (${sha256(token)}, ${expiresAt})`;
+    return expiresAt;
   }
 
-  async isValid(token: string): Promise<boolean> {
-    const rows = await this.sql`select 1 from sessions where token_hash = ${sha256(token)} and expires_at > now()`;
+  async touch(token: string): Promise<boolean> {
+    const rows = await this.sql`
+      update sessions set last_seen_at = now()
+      where token_hash = ${sha256(token)}
+        and expires_at > now()
+        and last_seen_at > now() - ${this.limits.idleMinutes}::int * interval '1 minute'
+      returning 1`;
     return rows.length > 0;
   }
 
@@ -64,22 +86,57 @@ export class PgSessionStore implements SessionStore {
   }
 
   async purgeExpired(): Promise<number> {
-    const result = await this.sql`delete from sessions where expires_at <= now()`;
+    const result = await this.sql`
+      delete from sessions
+      where expires_at <= now() or last_seen_at <= now() - ${this.limits.idleMinutes}::int * interval '1 minute'`;
     return result.count;
+  }
+
+  /**
+   * Se o usuário ou a senha do .env mudaram desde a última partida, derruba todas as sessões.
+   * Guarda só um hash scrypt (com sal aleatório) do par usuário/senha, nunca a senha.
+   * Devolve quantas sessões foram derrubadas.
+   */
+  async revokeIfCredentialsChanged(user: string, password: string): Promise<number> {
+    const [salt] = await this.sql<{ value: Buffer }[]>`select value from app_state where key = 'credential_salt'`;
+    const saltBytes = salt?.value ?? randomBytes(16);
+    const tag = await scryptAsync(`${user}\u0000${password}`, saltBytes, 32);
+    const [stored] = await this.sql<{ value: Buffer }[]>`select value from app_state where key = 'credential_tag'`;
+    if (stored && timingSafeEqual(Buffer.from(stored.value), tag)) return 0;
+    return this.sql.begin(async (tx) => {
+      const removed = stored ? (await tx`delete from sessions`).count : 0;
+      await tx`insert into app_state (key, value) values ('credential_salt', ${saltBytes}), ('credential_tag', ${tag})
+        on conflict (key) do update set value = excluded.value`;
+      return removed;
+    });
   }
 }
 
 /** Versão em memória, para testes. */
 export class MemorySessionStore implements SessionStore {
-  private readonly sessions = new Map<string, Date>();
+  private readonly sessions = new Map<string, { expiresAt: number; lastSeen: number }>();
 
-  async create(token: string, expiresAt: Date): Promise<void> {
-    this.sessions.set(token, expiresAt);
+  constructor(
+    private readonly limits: SessionLimits = DEFAULT_SESSION_LIMITS,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async create(token: string): Promise<Date> {
+    const expiresAt = this.now() + this.limits.maxHours * 60 * 60_000;
+    this.sessions.set(token, { expiresAt, lastSeen: this.now() });
+    return new Date(expiresAt);
   }
 
-  async isValid(token: string): Promise<boolean> {
-    const expiresAt = this.sessions.get(token);
-    return expiresAt !== undefined && expiresAt.getTime() > Date.now();
+  private alive(s: { expiresAt: number; lastSeen: number }): boolean {
+    const now = this.now();
+    return s.expiresAt > now && s.lastSeen > now - this.limits.idleMinutes * 60_000;
+  }
+
+  async touch(token: string): Promise<boolean> {
+    const s = this.sessions.get(token);
+    if (!s || !this.alive(s)) return false;
+    s.lastSeen = this.now();
+    return true;
   }
 
   async delete(token: string): Promise<void> {
@@ -88,8 +145,8 @@ export class MemorySessionStore implements SessionStore {
 
   async purgeExpired(): Promise<number> {
     let count = 0;
-    for (const [token, expiresAt] of this.sessions) {
-      if (expiresAt.getTime() <= Date.now()) {
+    for (const [token, s] of this.sessions) {
+      if (!this.alive(s)) {
         this.sessions.delete(token);
         count++;
       }

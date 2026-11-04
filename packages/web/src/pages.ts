@@ -21,11 +21,17 @@ const NAV: { id: Section; href: string; label: string }[] = [
 function layout(title: string, body: string, opts: { section?: Section; wide?: boolean } = {}): string {
   const nav = opts.section
     ? `<header class="topo">
+    <input class="menu-chave sr" type="checkbox" id="menu" autocomplete="off" aria-label="Menu">
+    <label class="menu-botao" for="menu" title="Menu"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></label>
     <a class="marca" href="/"><img class="anel pequeno" src="/icone.svg" alt="" width="22" height="22">Jatobá</a>
-    <nav aria-label="Principal">${NAV.map(
-      (item) => `<a href="${item.href}"${item.id === opts.section ? ' aria-current="page"' : ""}>${item.label}</a>`,
-    ).join("")}</nav>
-    <form method="post" action="/sair"><button class="discreto" type="submit">Sair</button></form>
+    <label class="menu-veu" for="menu" aria-hidden="true"></label>
+    <div class="gaveta">
+      <div class="gaveta-topo"><span class="marca"><img class="anel pequeno" src="/icone.svg" alt="" width="22" height="22">Jatobá</span><label class="menu-fechar" for="menu" title="Fechar menu" aria-hidden="true">×</label></div>
+      <nav aria-label="Principal">${NAV.map(
+        (item) => `<a href="${item.href}"${item.id === opts.section ? ' aria-current="page"' : ""}>${item.label}</a>`,
+      ).join("")}</nav>
+      <form method="post" action="/sair"><button class="discreto" type="submit">Sair</button></form>
+    </div>
   </header>`
     : "";
   return `<!doctype html>
@@ -63,6 +69,31 @@ function layout(title: string, body: string, opts: { section?: Section; wide?: b
   .topo nav { display: flex; gap: 1rem; flex: 1; flex-wrap: wrap; }
   .topo nav a { color: var(--suave); text-decoration: none; }
   .topo nav a[aria-current="page"] { color: var(--texto); font-weight: 600; text-decoration: underline; text-underline-offset: 0.3rem; }
+  /* Menu: no computador, tudo numa linha; no celular, gaveta lateral aberta pelo ícone (só CSS, sem script). */
+  .gaveta { display: contents; }
+  .menu-chave, .menu-botao, .menu-veu, .gaveta-topo { display: none; }
+  @media (max-width: 48rem) {
+    .topo { padding: 0.6rem 1rem; gap: 0.75rem; flex-wrap: nowrap; }
+    .menu-botao { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem;
+      margin: -0.25rem 0 -0.25rem -0.5rem; border-radius: 0.5rem; color: var(--texto); cursor: pointer; }
+    .menu-chave { display: block; }
+    .menu-chave:focus-visible + .menu-botao { outline: 2px solid var(--cerne); outline-offset: 2px; }
+    .gaveta { display: flex; flex-direction: column; gap: 1rem; position: fixed; z-index: 20; top: 0; bottom: 0; left: 0;
+      width: min(18rem, 82vw); padding: 0.75rem 1rem 1.5rem; overflow-y: auto; background: var(--fundo);
+      border-right: 1px solid var(--linha); box-shadow: 0 0 2rem rgb(0 0 0 / 0.2);
+      transform: translateX(-105%); visibility: hidden; transition: transform 0.2s ease, visibility 0.2s; }
+    .gaveta-topo { display: flex; justify-content: space-between; align-items: center; }
+    .menu-fechar { font-size: 1.75rem; line-height: 1; width: 2.75rem; height: 2.75rem; display: inline-flex;
+      align-items: center; justify-content: center; color: var(--suave); cursor: pointer; margin-right: -0.5rem; }
+    .topo .gaveta nav { flex-direction: column; flex-wrap: nowrap; gap: 0; flex: none; }
+    .topo .gaveta nav a { padding: 0.7rem 0.5rem; border-radius: 0.5rem; font-size: 1.05rem; }
+    .topo .gaveta nav a[aria-current="page"] { background: var(--painel); text-decoration: none; }
+    .menu-veu { position: fixed; inset: 0; z-index: 10; background: rgb(0 0 0 / 0.4); }
+    .menu-chave:checked ~ .gaveta { transform: none; visibility: visible; }
+    .menu-chave:checked ~ .menu-veu { display: block; }
+    body:has(.menu-chave:checked) { overflow: hidden; }
+  }
+  @media (max-width: 48rem) and (prefers-reduced-motion: reduce) { .gaveta { transition: none; } }
   p { margin: 1rem 0 0; }
   .suave { color: var(--suave); font-size: 0.95rem; }
   .rodape { border-top: 1px solid var(--linha); padding-top: 1rem; margin-top: 2rem; }
@@ -191,12 +222,12 @@ export function homePage(version: string, transactionCount: number, pendingRevie
   );
 }
 
-export function loginPage(error?: string): string {
+export function loginPage(error?: string, notice?: string): string {
   return layout(
     "Entrar · Jatobá Finance",
     `  <h1>Jatobá Finance</h1>
   <form class="entrar" method="post" action="/entrar">
-    ${error ? `<p class="erro" role="alert">${escapeHtml(error)}</p>` : ""}
+    ${error ? `<p class="erro" role="alert">${escapeHtml(error)}</p>` : ""}${notice ? `<p class="suave" role="status">${escapeHtml(notice)}</p>` : ""}
     <label>Usuário
       <input name="usuario" autocomplete="username" required autofocus>
     </label>

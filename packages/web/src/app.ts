@@ -3,7 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
-import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken, SESSION_DAYS } from "./auth.js";
+import { type Credentials, type LoginLimiter, type SessionStore, newSessionToken } from "./auth.js";
 import { CategoryError, DuplicateError, GoalError, ImportError, MAX_IMPORT_BYTES, type AccountInfo, type AiRunResult, type Category, type GoalEntry, type GoalProgress, type InvestmentTransaction, type CategoryUsage, type ImportOutcome, type MonthSummary, type RuleDetail, type RuleInput, type SubscriptionList, type TransactionDetail, type TransactionFilter, type ReviewRow, type SuspectPair, type TransactionRow } from "@jatoba/core";
 import type { BackupStatus } from "./scheduler.js";
 import { ICON_SVG } from "./icone.js";
@@ -98,7 +98,10 @@ export function createApp(deps: AppDeps): Hono {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:"],
-        scriptSrc: ["'self'"],
+        // O app não usa JavaScript no navegador (o menu do celular é só CSS).
+        scriptSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'none'"],
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
       },
@@ -125,14 +128,17 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ status: database ? "ok" : "erro", database: database ? "ok" : "fora do ar", version: deps.version }, database ? 200 : 503);
   });
 
-  const isLoggedIn = async (c: Context) => {
+  /** "ok": sessão válida; "expirou": havia cookie, mas a sessão acabou; "nenhuma": sem cookie. */
+  const sessionState = async (c: Context): Promise<"ok" | "expirou" | "nenhuma"> => {
     const token = getCookie(c, SESSION_COOKIE);
-    return token !== undefined && (await deps.sessions.isValid(token));
+    if (token === undefined) return "nenhuma";
+    return (await deps.sessions.touch(token)) ? "ok" : "expirou";
   };
 
   app.get("/entrar", async (c) => {
-    if (await isLoggedIn(c)) return c.redirect("/", 303);
-    return c.html(loginPage());
+    if ((await sessionState(c)) === "ok") return c.redirect("/", 303);
+    const notice = c.req.query("expirou") !== undefined ? "Sua sessão expirou. Entre de novo." : undefined;
+    return c.html(loginPage(undefined, notice));
   });
 
   app.post("/entrar", bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
@@ -155,8 +161,7 @@ export function createApp(deps: AppDeps): Hono {
 
     deps.limiter.succeed(key);
     const token = newSessionToken();
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60_000);
-    await deps.sessions.create(token, expiresAt);
+    const expiresAt = await deps.sessions.create(token);
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: "Strict",
@@ -176,8 +181,11 @@ export function createApp(deps: AppDeps): Hono {
 
   // Daqui para baixo, tudo exige login.
   app.use("*", async (c, next) => {
-    if (!(await isLoggedIn(c))) {
-      return c.req.method === "GET" ? c.redirect("/entrar", 303) : c.text("Faça login.", 401);
+    const state = await sessionState(c);
+    if (state !== "ok") {
+      if (state === "expirou") deleteCookie(c, SESSION_COOKIE, { path: "/", secure: secureCookie });
+      if (c.req.method !== "GET") return c.text(state === "expirou" ? "Sua sessão expirou. Faça login de novo." : "Faça login.", 401);
+      return c.redirect(state === "expirou" ? "/entrar?expirou" : "/entrar", 303);
     }
     c.header("Cache-Control", "no-store");
     await next();

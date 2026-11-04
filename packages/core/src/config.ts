@@ -25,6 +25,9 @@ const schema = z
     DATABASE_URL: z.url("precisa ser um endereço postgres:// válido"),
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),
     JATOBA_PUBLIC_URL: z.url("precisa ser um endereço https:// válido").optional(),
+    // Sessão: expira o que vier primeiro, inatividade ou tempo desde o login.
+    JATOBA_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5, "pelo menos 5 minutos").max(1440, "no máximo 1440 (24 h)").default(60),
+    JATOBA_SESSION_MAX_HOURS: z.coerce.number().int().min(1, "pelo menos 1 hora").max(720, "no máximo 720 (30 dias)").default(12),
     JATOBA_LOCALE: z.string().default("pt-BR"),
     JATOBA_CURRENCY: z.string().length(3, "use o código de 3 letras, como BRL").default("BRL"),
     TZ: z.string().default("America/Sao_Paulo"),

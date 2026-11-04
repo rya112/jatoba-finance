@@ -112,11 +112,11 @@ let months: string[];
 let summaries: Record<string, MonthSummary>;
 let lastFilter: TransactionFilter | undefined;
 
-async function makeApp(publicUrl?: string) {
+async function makeApp(publicUrl?: string, sessions: MemorySessionStore = new MemorySessionStore()) {
   return createApp({
     version: "teste",
     credentials: await Credentials.create(USER, PASSWORD),
-    sessions: new MemorySessionStore(),
+    sessions,
     limiter: new LoginLimiter(3),
     publicUrl,
     checkDatabase: async () => databaseUp,
@@ -220,6 +220,59 @@ describe("app", () => {
     const logout = await app.request("/sair", { method: "POST", headers: { Cookie: cookie, Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" } });
     expect(logout.headers.get("location")).toBe("/entrar");
     expect((await app.request("/", { headers: { Cookie: cookie } })).status).toBe(303);
+  });
+
+  it("sessão parada além do limite expira e avisa na tela de entrar", async () => {
+    let now = Date.now();
+    const app = await makeApp(undefined, new MemorySessionStore({ idleMinutes: 60, maxHours: 12 }, () => now));
+    const cookie = sessionCookie(await login(app, USER, PASSWORD));
+    now += 59 * 60_000;
+    expect((await app.request("/", { headers: { Cookie: cookie } })).status).toBe(200);
+    now += 61 * 60_000;
+    const res = await app.request("/", { headers: { Cookie: cookie } });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/entrar?expirou");
+    expect(res.headers.get("set-cookie") ?? "").toMatch(new RegExp(`${SESSION_COOKIE}=;`));
+    expect(await (await app.request("/entrar?expirou")).text()).toContain("Sua sessão expirou");
+    const post = await app.request("/revisar/lote", { method: "POST", headers: { Cookie: cookie, Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" }, body: "acao=todos" });
+    expect(post.status).toBe(401);
+  });
+
+  it("sessão em uso expira no tempo máximo desde o login", async () => {
+    let now = Date.now();
+    const app = await makeApp(undefined, new MemorySessionStore({ idleMinutes: 60, maxHours: 2 }, () => now));
+    const res = await login(app, USER, PASSWORD);
+    expect(res.headers.get("set-cookie") ?? "").toMatch(/Expires=/i);
+    const cookie = sessionCookie(res);
+    for (let i = 0; i < 3; i++) {
+      now += 35 * 60_000;
+      expect((await app.request("/", { headers: { Cookie: cookie } })).status).toBe(200);
+    }
+    now += 16 * 60_000; // 2 h 1 min desde o login
+    expect((await app.request("/", { headers: { Cookie: cookie } })).headers.get("location")).toBe("/entrar?expirou");
+  });
+
+  it("cabeçalhos de segurança: sem scripts, sem iframe, sem plugins", async () => {
+    const app = await makeApp();
+    const res = await app.request("/entrar");
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("script-src 'none'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("form-action 'self'");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+  });
+
+  it("no celular, o menu é uma gaveta lateral aberta pelo ícone, sem script", async () => {
+    const app = await makeApp();
+    const cookie = sessionCookie(await login(app, USER, PASSWORD));
+    const html = await (await app.request("/", { headers: { Cookie: cookie } })).text();
+    expect(html).toMatch(/<input class="menu-chave sr" type="checkbox" id="menu"/);
+    expect(html).toMatch(/<label class="menu-botao" for="menu"/);
+    expect(html).toMatch(/\.menu-chave:checked ~ \.gaveta/);
+    expect(html).not.toMatch(/<script/i);
   });
 
   it("recusa senha errada sem criar sessão", async () => {

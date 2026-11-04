@@ -124,7 +124,12 @@ try {
 const suggested = await categorize(sql);
 if (suggested > 0) console.log(`Sugestões de categoria atualizadas: ${suggested}`);
 
-const sessions = new PgSessionStore(sql);
+const sessions = new PgSessionStore(sql, {
+  idleMinutes: config.JATOBA_SESSION_IDLE_MINUTES,
+  maxHours: config.JATOBA_SESSION_MAX_HOURS,
+});
+const revoked = await sessions.revokeIfCredentialsChanged(config.JATOBA_ADMIN_USER, config.JATOBA_ADMIN_PASSWORD);
+if (revoked > 0) console.log(`Usuário ou senha mudaram: ${revoked} sessão(ões) aberta(s) encerrada(s).`);
 await sessions.purgeExpired();
 setInterval(() => void sessions.purgeExpired().catch(() => {}), 6 * 60 * 60_000).unref();
 

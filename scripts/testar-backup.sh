@@ -80,11 +80,12 @@ dc exec -T app jatoba restore "$SAFETY" --confirmar < "$TMP/chave.txt" >/dev/nul
 check "backup de segurança tem o estado de antes" "$(sql "select valor from marcador")" "alterado"
 
 echo "== Backup automático antes de migração"
-sql "drop table sessions; delete from schema_migrations where id = '0001_sessions';" >/dev/null
+# Simula uma atualização com migração nova: desfaz a mais recente (0011) e reinicia.
+sql "drop table app_state; alter table sessions drop column last_seen_at; delete from schema_migrations where id = '0011_session_idle';" >/dev/null
 dc restart app >/dev/null 2>&1
 wait_healthy
 dc logs --no-log-prefix app | grep -q "Backup antes das migrações" && ok "backup automático feito na partida" || fail "sem backup automático"
-check "migração reaplicada" "$(sql "select count(*) from schema_migrations where id = '0001_sessions'")" "1"
+check "migração reaplicada" "$(sql "select count(*) from schema_migrations where id = '0011_session_idle'")" "1"
 ls "$TMP/backups" | grep -q antes-migracao && ok "arquivo antes-migracao na pasta" || fail "arquivo antes-migracao"
 
 echo "== Restauração com --chave (funciona no PowerShell, sem redirecionamento)"
